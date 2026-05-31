@@ -1,0 +1,33 @@
+# 1. Chặn file cấu hình bảo mật cá nhân
+.env
+
+# 2. Chặn các thư mục cá nhân và cấu hình Chrome
+XYZ-CHAT-GEMINI/
+XYZ_Chrome_Profiles/
+
+# 3. Chặn các file Database cục bộ (để tránh đè dữ liệu trống lên Cloud)
+*.db
+*.db-journal
+*.sqlite3
+
+# 4. Chặn các file nháp, file chạy .bat của Windows
+*.bat
+app - Copy.py
+# app_Admin.py   <-- Nếu muốn GIỮ LẠI file Admin không cho lên mạng thì xóa dấu # ở đầu dòng này đi nhé!
+
+# 5. Chặn các file lưu trữ web, ghi chú (.htm, .html, .txt, .docx, .xlsx)
+*.htm
+*.html
+*_files/
+*.txt
+!requirements.txt
+*.xlsx
+*.docx
+*.pdf
+
+# 6. Chặn các thư mục rác hệ thống phát sinh khi chạy Python
+__pycache__/
+*.pyc
+env/
+venv/
+.vscode/
