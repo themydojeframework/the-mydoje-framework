@@ -894,7 +894,7 @@ with tab1:
                                 cell.removeAttribute("onclick");
                                 if (!cell.className.includes("black-note-bar")) {{
                                     cell.className = "locked-title";
-                                }}}
+                                }}
                             }}
                         }});
                     }});
