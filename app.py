@@ -582,6 +582,39 @@ if not st.session_state.authenticated:
             
     st.stop()
 
+# =====================================================================
+# ĐOẠN MÃ CHÈN VÀO SIDEBAR TRANG CHỦ (APP.PY) DÀNH CHO ADMIN
+# =====================================================================
+# Kiểm tra nếu người dùng hiện tại có quyền ADMIN trong session_state
+if st.session_state.get("user_role") == "ADMIN":
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🛠️ KHU VỰC ĐIỀU HÀNH")
+    
+    # Thay đường link ví dụ phía dưới bằng URL trang Admin thật mà Streamlit cấp cho bạn
+    url_trang_admin = "https://mydoje-leader.streamlit.app"
+    
+    # Tạo nút bấm chuyển trang bằng HTML/CSS đồng bộ, đẹp mắt
+    admin_link_html = f"""
+    <a href="{url_trang_admin}" target="_blank" style="text-decoration: none;">
+        <div style="
+            text-align: center;
+            background-color: #f0fdf4; 
+            color: #166534; 
+            border: 1px solid #bbf7d0;
+            padding: 9px; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-bottom: 10px;">
+            🔑 TRUY CẬP TRANG ADMIN PANEL
+        </div>
+    </a>
+    """
+    st.sidebar.markdown(admin_link_html, unsafe_allow_html=True)
+
+
 # =================================================================
 # 🏢 GIAO DIỆN CHÍNH TRÊN ĐẦU TRANG (TOP NAVBAR)
 # =================================================================

@@ -71,7 +71,7 @@ if not st.session_state["admin_logged_in"]:
                     user_in_db = db.check_or_create_user(email_input)
                     
                     # Cơ chế đặc cách tài khoản admin hệ thống đầu tiên nếu hệ thống mới thiết lập
-                    if email_input in ["admin@mydoje.com", "superadmin@gmail.com"] and user_in_db["role"] != "ADMIN":
+                    if email_input in ["admin@mydoje.com", "themydojeframework@gmail.com"] and user_in_db["role"] != "ADMIN":
                         db.update_user_role(email_input, "ADMIN")
                         user_in_db = db.check_or_create_user(email_input)
                         
