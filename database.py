@@ -4,6 +4,7 @@ from psycopg2.extras import DictCursor
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import streamlit as st
 
 # Kích hoạt đọc file .env dưới máy local
 load_dotenv()
@@ -43,7 +44,8 @@ def init_db():
                 title TEXT,
                 data_json TEXT,
                 created_at TEXT,
-                updated_at TEXT
+                updated_at TEXT,
+                user_email TEXT
             )
         """)
         cursor.execute("""
@@ -83,7 +85,8 @@ def init_db():
                 title TEXT,
                 data_json TEXT,
                 created_at TEXT,
-                updated_at TEXT
+                updated_at TEXT,
+                user_email TEXT
             )
         """)
         cursor.execute("""
@@ -164,11 +167,11 @@ def get_all_records():
     conn = get_connection()
     if "sqlite" in DATABASE_URL:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, title FROM records ORDER BY id DESC")
+        cursor.execute("SELECT id, title, user_email FROM records ORDER BY id DESC")
         rows = [dict(row) for row in cursor.fetchall()]
     else:
         cursor = conn.cursor(cursor_factory=DictCursor)
-        cursor.execute("SELECT id, title FROM records ORDER BY id DESC")
+        cursor.execute("SELECT id, title, user_email FROM records ORDER BY id DESC")
         rows = [dict(row) for row in cursor.fetchall()]
     cursor.close()
     conn.close()
@@ -194,27 +197,36 @@ def insert_record(title, data_json):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Lấy thông tin user hiện tại từ Streamlit Session State để lưu vào DB
+    current_user = st.session_state.get('logged_in_user', '')
     
     if "sqlite" in DATABASE_URL:
         cursor.execute(
-            "INSERT INTO records (title, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (title, data_json, now, now)
+            "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (?, ?, ?, ?, ?)",
+            (title, data_json, now, now, current_user)
         )
         conn.commit()
         new_id = cursor.lastrowid
+        cursor.close()
+        conn.close()
+        return new_id
     else:
-        cursor.execute(
-            "INSERT INTO records (title, data_json, created_at, updated_at) VALUES (%s, %s, %s, %s) RETURNING id;",
-            (title, data_json, now, now)
-        )
-        new_id = cursor.fetchone()[0]
-        conn.commit()
-        
-    cursor.close()
-    conn.close()
-    return new_id
+        try:
+            cursor.execute(
+                "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
+                (title, data_json, now, now, current_user)
+            )
+            new_id = cursor.fetchone()[0]
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return new_id
+        except Exception as e:
+            st.error(f"💥 DETECTED SUPABASE INSERT ERROR: {str(e)}")
+            cursor.close()
+            conn.close()
+            raise e
 
-# Định nghĩa thêm hàm add_record làm alias để app.py gọi không bị lỗi tương thích
 def add_record(title, data_json):
     return insert_record(title, data_json)
 
@@ -228,14 +240,23 @@ def update_record_data(record_id, data_json):
             "UPDATE records SET data_json = ?, updated_at = ? WHERE id = ?",
             (data_json, now, record_id)
         )
+        conn.commit()
+        cursor.close()
+        conn.close()
     else:
-        cursor.execute(
-            "UPDATE records SET data_json = %s, updated_at = %s WHERE id = %s",
-            (data_json, now, record_id)
-        )
-    conn.commit()
-    cursor.close()
-    conn.close()
+        try:
+            cursor.execute(
+                "UPDATE records SET data_json = %s, updated_at = %s WHERE id = %s",
+                (data_json, now, record_id)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            st.error(f"💥 DETECTED SUPABASE UPDATE ERROR: {str(e)}")
+            cursor.close()
+            conn.close()
+            raise e
 
 def update_record_title(record_id, new_title):
     conn = get_connection()
