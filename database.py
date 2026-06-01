@@ -1,158 +1,262 @@
 import sqlite3
+import psycopg2
+from psycopg2.extras import DictCursor
 import os
 from datetime import datetime
+from dotenv import load_dotenv
 
-DB_NAME = "app.db"
+# Kích hoạt đọc file .env dưới máy local
+load_dotenv()
+
+# Lấy cấu hình URL kết nối thông minh
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 
 def get_connection():
-    """Tạo kết nối tới SQLite vật lý và cấu hình trả về dạng Row."""
-    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row  # Giúp lấy dữ liệu theo tên cột như một Dictionary
-    return conn
+    """Tự động kết nối tới đúng hệ quản trị cơ sở dữ liệu dựa theo môi trường."""
+    if "sqlite" in DATABASE_URL:
+        conn = sqlite3.connect("app.db", check_same_thread=False)
+        conn.row_factory = sqlite3.Row  # Trả về dạng Row đối với SQLite
+        return conn
+    else:
+        # Kết nối tới Supabase PROD
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+        return conn
 
 def init_db():
-    """Khởi tạo file app.db và tự động tạo toàn bộ hệ thống bảng dữ liệu nếu chưa có."""
+    """Khởi tạo toàn bộ hệ thống bảng cho cả 2 môi trường SQLite và PostgreSQL."""
     conn = get_connection()
     cursor = conn.cursor()
     
-    # 1. Bảng lưu User (Mặc định phân quyền ban đầu là FREE)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE,
-            role TEXT DEFAULT 'FREE',
-            created_at TEXT
-        )
-    """)
-    
-    # 2. Bảng lưu dữ liệu Tab 1 (Sheet Nhạc và Ma trận nốt nhạc JSON)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            data_json TEXT,
-            created_at TEXT,
-            updated_at TEXT
-        )
-    """)
-    
-    # 3. Bảng lưu dữ liệu nâng cao cho Tab 2 (Belly Dance) & Tab 3 (Private Yoga)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS yoga_data (
-            id INTEGER PRIMARY KEY,
-            video_url TEXT,
-            content_html TEXT
-        )
-    """)
-    
-    # Tự động chèn dữ liệu mẫu ban đầu cho Belly Dance và Yoga nếu bảng đang trống
-    cursor.execute("SELECT COUNT(*) FROM yoga_data")
-    if cursor.fetchone()[0] == 0:
+    if "sqlite" in DATABASE_URL:
+        # --- CẤU HÌNH BẢNG CHO SQLITE (DƯỚI MÁY) ---
         cursor.execute("""
-            INSERT INTO yoga_data (id, video_url, content_html) 
-            VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-            '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE,
+                role TEXT DEFAULT 'FREE',
+                created_at TEXT
+            )
         """)
         cursor.execute("""
-            INSERT INTO yoga_data (id, video_url, content_html) 
-            VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-            '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+            CREATE TABLE IF NOT EXISTS records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                data_json TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS yoga_data (
+                id INTEGER PRIMARY KEY,
+                video_url TEXT,
+                content_html TEXT
+            )
         """)
         
+        # Chèn dữ liệu mẫu cho SQLite
+        cursor.execute("SELECT COUNT(*) FROM yoga_data")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO yoga_data (id, video_url, content_html) 
+                VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+            """)
+            cursor.execute("""
+                INSERT INTO yoga_data (id, video_url, content_html) 
+                VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+            """)
+    else:
+        # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE MÂY) ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE,
+                role TEXT DEFAULT 'FREE',
+                created_at TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS records (
+                id SERIAL PRIMARY KEY,
+                title TEXT,
+                data_json TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS yoga_data (
+                id INT PRIMARY KEY,
+                video_url TEXT,
+                content_html TEXT
+            )
+        """)
+        
+        # Chèn dữ liệu mẫu cho Supabase
+        cursor.execute("SELECT COUNT(*) FROM yoga_data")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO yoga_data (id, video_url, content_html) 
+                VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+            """)
+            cursor.execute("""
+                INSERT INTO yoga_data (id, video_url, content_html) 
+                VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+            """)
+            
     conn.commit()
+    cursor.close()
     conn.close()
 
 # ==========================================
-# PHẦN 1: CÁC HÀM XỬ LÝ USER (PHÂN QUYỀN ĐĂNG NHẬP)
+# PHẦN 1: CÁC HÀM XỬ LÝ USER
 # ==========================================
 
 def check_or_create_user(email):
-    """Kiểm tra user đăng nhập, nếu chưa có tự động tạo tài khoản mới hạng FREE."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-    user = cursor.fetchone()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    if not user:
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("INSERT INTO users (email, role, created_at) VALUES (?, 'FREE', ?)", (email, now))
-        conn.commit()
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
         cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
-        user = cursor.fetchone()
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("INSERT INTO users (email, role, created_at) VALUES (?, 'FREE', ?)", (email, now))
+            conn.commit()
+            cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+            row = cursor.fetchone()
+        user = dict(row) if row else None
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("INSERT INTO users (email, role, created_at) VALUES (%s, 'FREE', %s)", (email, now))
+            conn.commit()
+            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            row = cursor.fetchone()
+        user = dict(row) if row else None
         
+    cursor.close()
     conn.close()
     return user
 
 def update_user_role(email, new_role):
-    """Cập nhật thứ hạng tài khoản (Ví dụ: Nâng từ FREE lên PREMIUM hoặc ADMIN)."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET role = ? WHERE email = ?", (new_role, email))
+    if "sqlite" in DATABASE_URL:
+        cursor.execute("UPDATE users SET role = ? WHERE email = ?", (new_role, email))
+    else:
+        cursor.execute("UPDATE users SET role = %s WHERE email = %s", (new_role, email))
     conn.commit()
+    cursor.close()
     conn.close()
 
 # ==========================================
-# PHẦN 2: CÁC HÀM XỬ LÝ TAB 1 (DANH SÁCH SHEET NHẠC)
+# PHẦN 2: CÁC HÀM XỬ LÝ TAB 1 (SHEET NHẠC)
 # ==========================================
 
 def get_all_records():
-    """Lấy danh sách rút gọn (ID, Title) để xếp vào Selectbox tại Sidebar."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, title FROM records ORDER BY id DESC")
-    rows = cursor.fetchall()
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, title FROM records ORDER BY id DESC")
+        rows = [dict(row) for row in cursor.fetchall()]
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute("SELECT id, title FROM records ORDER BY id DESC")
+        rows = [dict(row) for row in cursor.fetchall()]
+    cursor.close()
     conn.close()
     return rows
 
 def get_record_by_id(record_id):
-    """Lấy chi tiết toàn bộ dữ liệu bao gồm cả chuỗi nốt nhạc JSON của một bài nhạc."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
-    row = cursor.fetchone()
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+        row = cursor.fetchone()
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute("SELECT * FROM records WHERE id = %s", (record_id,))
+        row = cursor.fetchone()
+    
+    result = dict(row) if row else None
+    cursor.close()
     conn.close()
-    return row
+    return result
 
 def insert_record(title, data_json):
-    """Tạo mới một bài nhạc (Khi người dùng bấm SAVE NEW trên giao diện khách)."""
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute(
-        "INSERT INTO records (title, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
-        (title, data_json, now, now)
-    )
-    conn.commit()
-    new_id = cursor.lastrowid
+    
+    if "sqlite" in DATABASE_URL:
+        cursor.execute(
+            "INSERT INTO records (title, data_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (title, data_json, now, now)
+        )
+        conn.commit()
+        new_id = cursor.lastrowid
+    else:
+        cursor.execute(
+            "INSERT INTO records (title, data_json, created_at, updated_at) VALUES (%s, %s, %s, %s) RETURNING id;",
+            (title, data_json, now, now)
+        )
+        new_id = cursor.fetchone()[0]
+        conn.commit()
+        
+    cursor.close()
     conn.close()
     return new_id
 
+# Định nghĩa thêm hàm add_record làm alias để app.py gọi không bị lỗi tương thích
+def add_record(title, data_json):
+    return insert_record(title, data_json)
+
 def update_record_data(record_id, data_json):
-    """Cập nhật ma trận nốt nhạc JSON, giữ nguyên tiêu đề bài nhạc cũ."""
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute(
-        "UPDATE records SET data_json = ?, updated_at = ? WHERE id = ?",
-        (data_json, now, record_id)
-    )
+    
+    if "sqlite" in DATABASE_URL:
+        cursor.execute(
+            "UPDATE records SET data_json = ?, updated_at = ? WHERE id = ?",
+            (data_json, now, record_id)
+        )
+    else:
+        cursor.execute(
+            "UPDATE records SET data_json = %s, updated_at = %s WHERE id = %s",
+            (data_json, now, record_id)
+        )
     conn.commit()
+    cursor.close()
     conn.close()
 
 def update_record_title(record_id, new_title):
-    """Đổi tên tiêu đề bài nhạc độc lập (Khi Admin/User kích hoạt tính năng RENAME)."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE records SET title = ? WHERE id = ?", (new_title, record_id))
+    if "sqlite" in DATABASE_URL:
+        cursor.execute("UPDATE records SET title = ? WHERE id = ?", (new_title, record_id))
+    else:
+        cursor.execute("UPDATE records SET title = %s WHERE id = %s", (new_title, record_id))
     conn.commit()
+    cursor.close()
     conn.close()
 
 def delete_record(record_id):
-    """Xóa vĩnh viễn một bài nhạc khỏi hệ thống cơ sở dữ liệu."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
+    if "sqlite" in DATABASE_URL:
+        cursor.execute("DELETE FROM records WHERE id = ?", (record_id,))
+    else:
+        cursor.execute("DELETE FROM records WHERE id = %s", (record_id,))
     conn.commit()
+    cursor.close()
     conn.close()
 
 # ==========================================
@@ -160,21 +264,34 @@ def delete_record(record_id):
 # ==========================================
 
 def get_yoga_data_by_id(content_id):
-    """Lấy link video bài giảng và khối mã HTML của Belly Dance (id=2) hoặc Yoga (id=1)."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = ?", (content_id,))
-    row = cursor.fetchone()
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
+        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = ?", (content_id,))
+        row = cursor.fetchone()
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = %s", (content_id,))
+        row = cursor.fetchone()
+        
+    result = dict(row) if row else None
+    cursor.close()
     conn.close()
-    return row
+    return result
 
 def update_yoga_data(content_id, video_url, content_html):
-    """Cập nhật link video mới hoặc chỉnh sửa các khối kiến thức phân đoạn HTML."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE yoga_data SET video_url = ?, content_html = ? WHERE id = ?",
-        (video_url, content_html, content_id)
-    )
+    if "sqlite" in DATABASE_URL:
+        cursor.execute(
+            "UPDATE yoga_data SET video_url = ?, content_html = ? WHERE id = ?",
+            (video_url, content_html, content_id)
+        )
+    else:
+        cursor.execute(
+            "UPDATE yoga_data SET video_url = %s, content_html = %s WHERE id = %s",
+            (video_url, content_html, content_id)
+        )
     conn.commit()
+    cursor.close()
     conn.close()
