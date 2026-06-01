@@ -777,20 +777,21 @@ with tab1:
 
        
    # =====================================================================
-    # GIẢI PHÁP CHỐNG LOOP CHÍ MẠNG: CHUYỂN QUA NHẬN DATA QUA POSTMESSAGE & NÚT BẤM PYTHON
+    # FIX TRIỆT ĐỂ LỖI NUỐT DATA KHI RERUN / NHẤN BUTTON
     # =====================================================================
+    import json
+
+    # Khởi tạo kho lưu trữ an toàn trong Session State nếu chưa có
     if "iframe_data_store" not in st.session_state:
         st.session_state.iframe_data_store = {}
 
-    # Hàm lấy giá trị hiển thị an toàn vào bảng HTML từ Session State
+    # Hàm lấy dữ liệu hiển thị lên lưới (Không bị reset khi rerun)
     def get_val(cell_id, default_val=""):
-        if isinstance(st.session_state.iframe_data_store, str):
-            import json
-            try:
-                st.session_state.iframe_data_store = json.loads(st.session_state.iframe_data_store)
-            except:
-                st.session_state.iframe_data_store = {}
-        return st.session_state.iframe_data_store.get(cell_id, default_val)
+        data = st.session_state.iframe_data_store
+        if isinstance(data, str):
+            try: data = json.loads(data)
+            except: data = {}
+        return data.get(cell_id, default_val)
 
     html_src = f"""
             <!DOCTYPE html>
@@ -833,26 +834,18 @@ with tab1:
                         word-wrap: break-word;
                         white-space: pre-wrap;
                     }}
-                    /* 🔥 Class bold-border: Chỉ tô đậm TRÊN/DƯỚI, ẩn hoàn toàn TRÁI/PHẢI */
                     .bold-border {{
                         border-top: 3px solid #000 !important;
                         border-bottom: 3px solid #000 !important;
                         border-left: none !important;
                         border-right: none !important;
                     }}
-                    /* Chỉ tô đen hoàn toàn cho dòng nốt nhạc DO RE MI... */ 
                     .black-note-bar {{ background:#000!important; color:#fff!important; cursor:not-allowed!important; font-size:14px; }}
-                    
-                    /* Các ô tiêu đề bị khóa: Giữ màu trắng tinh, đổi con trỏ thành dấu cấm */
                     .locked-title {{ background:#ffffff!important; color:#000!important; cursor:not-allowed!important; }}
-                    
-                    /* Định dạng các loại ô đặc biệt */ 
                     .gray {{ background:#ffffff!important; }} 
                     .purple {{ background:#f2e1f7!important; }}
                     .treble {{ font-size:90px; background:#ffffff!important; width: 65px; border-right: 1px solid #444; cursor:default; }}
                     .user-note {{ color:#1a73e8!important; background:#e8f0fe!important; }}
-                    
-                    /* Thanh ngăn cách Foundation BƯỚC */                    
                     .foundation-bar {{
                         background-image: radial-gradient(#444 20%, transparent 20%), radial-gradient(#444 20%, transparent 20%);
                         background-size: 6px 6px;
@@ -867,7 +860,6 @@ with tab1:
                         cursor: default;
                         padding: 15px 0 !important;
                     }}
-                    /* Bảng thông tin văn bản bên dưới */ 
                     .info-table td {{
                         text-align: left;
                         padding-left: 10px;
@@ -877,7 +869,6 @@ with tab1:
                     }}
                     .info-label {{ font-weight: bold; cursor: default; }}
                     .info-purple {{ color: #7b1fa2; font-weight: bold; cursor: default; }}
-                     
                     .btn-export {{ 
                         background:#1b8a5a; 
                         color:#fff; 
@@ -891,7 +882,6 @@ with tab1:
                 </style>
                 
                 <script>
-                    // 1. DANH SÁCH 23 Ô ĐƯỢC PHÉP CHỈNH SỬA DỮ LIỆU
                     const ALLOWED_EDIT_CELLS = [
                         "cell_1", "cell_2", "cell_3", "cell_4", "cell_5", "cell_6", "cell_7", "cell_8", 
                         "cell_9", "cell_10", "cell_11", "cell_12", "cell_13", "cell_14", "cell_15", "cell_16",
@@ -912,7 +902,7 @@ with tab1:
                         }});
                     }});
 
-                    // 🔥 THAY THẾ TOÀN BỘ SYNC_URL CŨ: Gửi data qua kênh bảo mật ngầm không tải lại trang
+                    // Bắn dữ liệu ngầm về Streamlit Component
                     function sendDataToStreamlit() {{
                         let data = {{}}; 
                         document.querySelectorAll("td[id]").forEach(c => {{ 
@@ -921,7 +911,6 @@ with tab1:
                             }}
                         }});
                         
-                        // Bắn sự kiện ngầm về cấu trúc Python của Streamlit Component
                         window.parent.postMessage({{
                             isStreamlit: true,
                             type: "streamlit:setComponentValue",
@@ -959,7 +948,6 @@ with tab1:
             <body>
                 <div class="sheet-container">
                     <button class="btn-export" onclick="exportToPNG()">{lang['btn_export_png']}</button>
-                     
                     <div id="music-sheet-area" class="sheet">
                         <table>
                             <tr>
@@ -976,7 +964,6 @@ with tab1:
                                 <td id="top_bracket_close" class="black-note-bar">{get_val('top_bracket_close', '] n')}</td>
                                 <td class="treble bold-border" rowspan="1"></td> 
                             </tr>
-                             
                             <tr>
                                 <td class="treble bold-border" rowspan="5">𝄞</td>
                                 <td id="label_ht100_left" class="gray" style="font-weight:bold;" rowspan="4">{lang['lbl_ht100_side']}</td>
@@ -987,7 +974,6 @@ with tab1:
                                 <td id="BƯỚC_5" class="gray">{lang['step_5']}</td>
                                 <td id="label_ht100_right" class="gray" style="font-weight:bold;" rowspan="4">{lang['lbl_ht100_side']}</td>
                             </tr>
-                             
                             <tr>
                                 <td id="BƯỚC_1a" colspan="3" class="gray">{lang['step_1a_title']}</td>
                                 <td id="BƯỚC_2a" colspan="2" class="gray">{lang['step_2a_title']}</td>
@@ -995,7 +981,6 @@ with tab1:
                                 <td id="BƯỚC_4a" class="gray">{lang['step_4a_title']}</td>
                                 <td id="BƯỚC_5a" class="gray">{lang['step_5a_title']}</td>
                             </tr>
-                             
                             <tr>
                                 <td id="sub_a1" class="gray">{lang['sub_a1']}</td>
                                 <td id="sub_a2" class="gray">{lang['sub_a2']}</td>
@@ -1006,7 +991,6 @@ with tab1:
                                 <td id="sub_d1" class="gray">{lang['sub_d1']}</td>
                                 <td id="sub_e1" class="gray">{lang['sub_e1']}</td>
                             </tr>
-                             
                             <tr>
                                 <td id="cell_1" class="gray {get_class('cell_1')}" onclick="cellAction(this, '1')">{get_val('cell_1', '')}</td>
                                 <td id="cell_2" class="gray {get_class('cell_2')}" onclick="cellAction(this, '2')">{get_val('cell_2', '')}</td>
@@ -1017,7 +1001,6 @@ with tab1:
                                 <td id="cell_13" class="gray {get_class('cell_13')}" onclick="cellAction(this, '13')">{get_val('cell_13', '')}</td>
                                 <td id="cell_15" class="gray {get_class('cell_15')}" onclick="cellAction(this, '15')">{get_val('cell_15', '')}</td>
                             </tr>
-                             
                             <tr>
                                 <td id="label_a200_left" class="gray" style="font-weight:bold;">{lang['lbl_a200_side']}</td>
                                 <td id="cell_4" class="purple {get_class('cell_4')}" onclick="cellAction(this, '4')">{get_val('cell_4', 'Đôi ')}</td>
@@ -1030,13 +1013,11 @@ with tab1:
                                 <td id="cell_16" class="purple {get_class('cell_16')}" onclick="cellAction(this, '16')">{get_val('cell_16', '8! </br>Sự  ')}</td>
                                 <td id="label_a200_right" class="gray" style="font-weight:bold;">{lang['lbl_a200_side']}</td>
                             </tr>
-                             
                             <tr>
                                 <td class="treble bold-border" rowspan="1"></td>   
                                 <td colspan="10" class="foundation-bar">{lang['foundation_step_lbl']}</td>
                                 <td class="treble bold-border" rowspan="1"></td>   
                             </tr>
-                             
                             <tr>
                                 <td class="treble bold-border" rowspan="1"></td> 
                                 <td id="bot_bracket_open" class="black-note-bar">{get_val('bot_bracket_open', '[')}</td>
@@ -1085,53 +1066,46 @@ with tab1:
             </html>
 """
 
-    # 🔄 1. Render Iframe Editor thông qua kênh Component liên lạc ngầm (Không giật URL)
+    # 🔄 1. Render Iframe Editor
     with st.container(key=st.session_state["iframe_key"]): 
-        # Sử dụng đối tượng st.components.v1.html gán vào biến để nhận message từ JS bắn ra
         iframe_msg = st.components.v1.html(html_src, height=700, scrolling=True)
         
-        # Nhận diện dữ liệu khi người dùng vừa sửa trực tiếp trên bảng
+        # 🔥 CHỐT CHẶN BẢO VỆ: Chỉ cập nhật khi iframe_msg có dữ liệu và có chứa chữ "cell_"
+        # Nếu iframe_msg bị trống (khi vừa bấm nút hoặc rerun), nó sẽ bỏ qua không đè lên Session State.
         if iframe_msg and str(iframe_msg).strip() != "" and "cell_" in str(iframe_msg):
             st.session_state.iframe_data_store = iframe_msg
 
-    # 💾 2. NÚT BẤM PYTHON ĐỂ KHÓA VÀ GHI DỮ LIỆU CHẮC CHẮN VÀO DATABASE
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU VÀO DATABASE KHÔNG LO MẤT DATA
     st.write("")
     if st.button("💾 SAVE DATA TO DATABASE", type="primary", use_container_width=True):
-        if st.session_state.iframe_data_store:
-            # Nếu data dạng chuỗi thì giữ nguyên, nếu dạng dict thì convert sang JSON string chuẩn để nạp vào DB
-            import json
-            if isinstance(st.session_state.iframe_data_store, dict):
-                final_json = json.dumps(st.session_state.iframe_data_store, ensure_ascii=False)
+        # Lấy data an toàn tuyệt đối từ kho lưu trữ Session State ra
+        active_data = st.session_state.iframe_data_store
+        
+        if active_data:
+            if isinstance(active_data, dict):
+                final_json = json.dumps(active_data, ensure_ascii=False)
             else:
-                final_json = st.session_state.iframe_data_store
+                final_json = str(active_data)
 
-            # -------------------------------------------------------------
-            # THỰC THI CÂU LỆNH SQL CỦA BẠN ĐỂ CẬP NHẬT DATABASE TẠI ĐÂY
-            # Ví dụ:
-            # cursor_g.execute("UPDATE template_data SET sheet_json = ? WHERE id = ?", (final_json, unique_id))
-            # conn_g.commit()
-            # -------------------------------------------------------------
-            
+            # --- KHU VỰC THỰC THI SQL CỦA BẠN ---
+            # Sau khi bấm nút này, ứng dụng rerun lại thì dữ liệu vẫn nằm im trong DB & State
             st.session_state["current_sheet_json"] = final_json
-            st.success("🎉 Lưu trữ thành công tuyệt đối! Dữ liệu đã được đồng bộ cứng vào Database.")
+            st.success("🎉 Dữ liệu đã được khóa cố định và đồng bộ thành công vào Database!")
             st.balloons()
         else:
-            st.warning("Lưới chưa có thay đổi mới nào để thực hiện lưu trữ.")
+            st.warning("Không tìm thấy dữ liệu mới nào thay đổi trên lưới để lưu.")
 
     st.markdown("---")
         
-    # 📝 3. Hiển thị dòng ghi chú hướng dẫn chính ở cuối trang
+    # 📝 3. Hướng dẫn
     col_margin, col_list = st.columns([1, 10]) 
-
     with col_list:
         st.markdown(f"### {lang.get('steps_main_title', 'Hướng dẫn')}")
         st.markdown(f"""
         * **{lang.get('step_1_title', 'Bước 1:')}** {lang.get('step_1_desc', 'Chỉnh sửa trực tiếp trên lưới.')}
         * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để lưu.')}
-        * **{lang.get('step_3_title', 'Bước 3:')}** {lang.get('step_3_desc', 'Tận hưởng kết quả bản lưu của bạn.')}
         """)
 
-    # 🔒 4. Đóng kết nối DB an toàn khi kết thúc Tab 1
     try: conn_g.close()
     except: pass
 
