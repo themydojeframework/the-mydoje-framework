@@ -1100,7 +1100,7 @@ with tab1:
                 color: white !important;
             }
         </style>
-    """, unsafe_allowed_html=True)
+    """, unsafe_allow_html=True) # 🔥 ĐÃ SỬA: Đổi từ unsafe_allowed_html thành unsafe_allow_html
 
     # 💾 2. NÚT BẤM LƯU DỮ LIỆU ĐÃ CÓ SẴN BIẾN JSON
     st.write("")
