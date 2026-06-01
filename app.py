@@ -1083,11 +1083,28 @@ with tab1:
     with st.container(key=st.session_state["iframe_key"]): 
         st.components.v1.html(html_src, height=700, scrolling=True)
 
-    # 💾 2. NÚT BẤM LƯU DỮ LIỆU (ĐÃ ĐỔI SANG MÀU XANH DƯƠNG CHUYÊN NGHIỆP)
+    # =====================================================================
+    # 🎨 ÉP NÚT BẤM STREAMLIT SANG MÀU XANH DA TRỜI (BLUE) BẰNG CSS
+    # =====================================================================
+    st.markdown("""
+        <style>
+            div.stButton > button:first-child {
+                background-color: #1A73E8 !important; /* Màu xanh da trời Google */
+                color: white !important;               /* Chữ trắng */
+                border: none !important;
+                border-radius: 6px !important;         /* Bo góc mềm mại */
+                transition: background-color 0.3s ease;
+            }
+            div.stButton > button:first-child:hover {
+                background-color: #1557B0 !important; /* Màu xanh đậm hơn khi di chuột vào */
+                color: white !important;
+            }
+        </style>
+    """, unsafe_allowed_html=True)
+
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU 
     st.write("")
-    
-    # Sử dụng type="secondary" để loại bỏ màu đỏ rực nguy hiểm, đổi thành màu xanh dương/trung tính lịch sự
-    if st.button("💾 SAVE DATA", type="secondary", use_container_width=True):
+    if st.button("💾 SAVE DATA", use_container_width=True):
         # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
         active_data = st.session_state.iframe_data_store
         
