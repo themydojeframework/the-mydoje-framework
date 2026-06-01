@@ -78,45 +78,98 @@ def init_authenticator():
         except Exception:
             return None
 
+#----------------------------------
+#KẾT NỐI DATABASE TRÊN SUPASE VÀ APP.DB Ở LOCAL
+#----------------------------------
 import os
+import sqlite3
 import psycopg2
 from psycopg2.extras import DictCursor
+from dotenv import load_dotenv  # Thêm thư viện để đọc file .env dưới máy
+
+# Kích hoạt đọc file .env (Dưới local sẽ đọc được DATABASE_URL=sqlite:///app.db)
+load_dotenv()
 
 authenticator = init_authenticator()
 db.init_db()
 
-# --- KẾT NỐI POSTGRESQL SUPABASE PROD ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-cursor = conn.cursor(cursor_factory=DictCursor)
+# --- ĐOẠN ĐỌC BIẾN MÔI TRƯỜNG PHÂN THÂN ---
+# Nếu không tìm thấy DATABASE_URL trong hệ thống, mặc định sẽ dùng SQLite local
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 
-# 1. Tạo bảng yoga_data kiểu Postgres (Dùng SERIAL cho id)
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS yoga_data (
-        id SERIAL PRIMARY KEY,
-        video_url TEXT,
-        content_html TEXT
-    );
-""")
-conn.commit()
-
-# 2. Kiểm tra xem bảng có dữ liệu chưa
-cursor.execute("SELECT COUNT(*) FROM yoga_data;")
-if cursor.fetchone()[0] == 0:
-    # Để Postgres tự quản lý ID, ta KHÔNG chèn cột 'id' vào đây, nó sẽ tự nhảy 1, 2 nhé bạn
-    cursor.execute(
-        "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-        ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
-    )
-    cursor.execute(
-        "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-        ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
-    )
+# KIỂM TRA: Nếu trong link có chứa chữ "sqlite" -> Chạy máy Local (SQLite)
+if "sqlite" in DATABASE_URL:
+    # ----------------------------------------------------------------
+    # CHẠY DƯỚI MÁY (LOCAL - SQLITE)
+    # ----------------------------------------------------------------
+    conn = sqlite3.connect("app.db", check_same_thread=False)
+    conn.row_factory = sqlite3.Row  # Giúp trả về dạng Dictionary giống Postgres
+    cursor = conn.cursor()
+    
+    # Tạo bảng kiểu SQLite (Dùng AUTOINCREMENT)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS yoga_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            video_url TEXT,
+            content_html TEXT
+        );
+    """)
     conn.commit()
+    
+    # Kiểm tra và nạp dữ liệu mẫu cho SQLite nếu bảng trống
+    cursor.execute("SELECT COUNT(*) FROM yoga_data;")
+    if cursor.fetchone()[0] == 0:
+        # SQLite dùng dấu hỏi chấm (?) làm tham số truyền vào
+        cursor.execute(
+            "INSERT INTO yoga_data (video_url, content_html) VALUES (?, ?);",
+            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+        )
+        cursor.execute(
+            "INSERT INTO yoga_data (video_url, content_html) VALUES (?, ?);",
+            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+        )
+        conn.commit()
+        
+    print("--- ĐÃ KẾT NỐI VÀO DATABASE SQLITE LOCAL THÀNH CÔNG ---")
 
-# Đóng cursor và connection sau khi hoàn thành khởi tạo
+else:
+    # ----------------------------------------------------------------
+    # CHẠY TRÊN MÂY (SUPABASE PROD - POSTGRESQL)
+    # ----------------------------------------------------------------
+    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+    cursor = conn.cursor(cursor_factory=DictCursor)
+    
+    # Tạo bảng kiểu Postgres (Dùng SERIAL)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS yoga_data (
+            id SERIAL PRIMARY KEY,
+            video_url TEXT,
+            content_html TEXT
+        );
+    """)
+    conn.commit()
+    
+    # Kiểm tra và nạp dữ liệu mẫu cho Postgres nếu bảng trống
+    cursor.execute("SELECT COUNT(*) FROM yoga_data;")
+    if cursor.fetchone()[0] == 0:
+        # Postgres dùng dấu phần trăm s (%s) làm tham số truyền vào
+        cursor.execute(
+            "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
+            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+        )
+        cursor.execute(
+            "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
+            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+        )
+        conn.commit()
+        
+    print("--- ĐÃ KẾT NỐI VÀO DATABASE SUPABASE PROD THÀNH CÔNG ---")
+
+# Đóng tài nguyên sau khi khởi tạo xong (Dùng chung cho cả 2 môi trường)
 cursor.close()
 conn.close()
+
+
 
 def check_or_create_user_local(email):
     conn_u = sqlite3.connect("app.db", check_same_thread=False)
