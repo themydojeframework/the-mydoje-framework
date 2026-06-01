@@ -879,13 +879,13 @@ with tab1:
                         }});
                     }});
 
-                    function syncDataToParentURL() {
-                        let data = {}; 
-                        document.querySelectorAll("td[id]").forEach(c => { 
-                            if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {
+                    function syncDataToParentURL() {{
+                        let data = {{}}; 
+                        document.querySelectorAll("td[id]").forEach(c => {{ 
+                            if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {{
                                 data[c.id] = c.innerText; 
-                            }
-                        });
+                            }}
+                        }});
 
                         // Mã hóa dữ liệu JSON an toàn cho URL
                         let jsonStr = encodeURIComponent(JSON.stringify(data));
@@ -897,7 +897,7 @@ with tab1:
                         // Ép trang cha chuyển hướng sang URL mới có chứa dữ liệu bảng nhạc
                         // Cách này vượt qua mọi rào cản bảo mật Iframe của Streamlit Cloud
                         window.parent.location.href = currentOrigin + currentPath + "?grid_data=" + jsonStr;
-                    }
+                    }}
 
                     // 🔥 THÊM HÀM NÀY: Xử lý biến dấu | thành dấu xuống hàng thực tế \n
                     // Cấu hình mới: Nhận diện cụm ".." để bẻ dòng xuống hàng \n
