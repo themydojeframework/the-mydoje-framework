@@ -18,20 +18,22 @@ def get_connection():
     
     if "sqlite" in DATABASE_URL:
         conn = sqlite3.connect("app.db", check_same_thread=False)
-        conn.row_factory = sqlite3.Row  # Trả về dạng Row đối với SQLite
+        conn.row_factory = sqlite3.Row
         return conn
     else:
-        # 🔥 KHÓA BẢO VỆ 1: Làm sạch chuỗi và đồng bộ đầu ngữ cho đúng gu của psycopg2
+        # Làm sạch khoảng trắng thừa
         clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
+        
+        # Chỉ nắn đầu ngữ nếu nó là postgresql://
         if clean_url.startswith("postgresql://"):
             clean_url = clean_url.replace("postgresql://", "postgres://", 1)
             
         try:
-            # 🔥 KHÓA BẢO VỆ 2: Kết nối thẳng bằng cổng 5432 trực tiếp từ Secrets
-            conn = psycopg2.connect(clean_url, sslmode="require")
+            # Kết nối qua cổng Pooler IPv4 kèm tham số chống nghẽn bọc sẵn trong chuỗi
+            conn = psycopg2.connect(clean_url)
             return conn
         except Exception as e:
-            # Nếu có lỗi (như sai mật khẩu, sai cú pháp...), ép hiện lỗi thật ra giao diện Streamlit!
+            import streamlit as st
             st.error(f"💥 LỖI KẾT NỐI SUPABASE THỰC TẾ: {str(e)}")
             raise e
 
