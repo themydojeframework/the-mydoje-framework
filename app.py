@@ -534,14 +534,16 @@ with tab1:
     }
     DEFAULT_JSON_STR = json.dumps(DEFAULT_DATA)
 
-    # --- HÀM TRÍCH XUẤT STRING JSON SẠCH TUYỆT ĐỐI ---
+    # --- HÀM TRÍCH XUẤT STRING JSON SẠCH TUYỆT ĐỐI (ĐÃ FIX ÉP NHÁY KÉP CHỐNG LỖI SUPABASE) ---
     def clean_json_string(raw_input):
         if raw_input is None:
             return DEFAULT_JSON_STR
-        if isinstance(raw_input, str):
-            cleaned = raw_input.strip()
-            if cleaned.startswith("{") and cleaned.endswith("}"):
-                return cleaned
+            
+        # Nếu đã là dict/list sẵn thì ép thành chuỗi nháy kép chuẩn luôn
+        if isinstance(raw_input, (dict, list)):
+            return json.dumps(raw_input, ensure_ascii=False)
+            
+        # Xử lý bóc tách nếu object bị bọc bởi các thuộc tính Streamlit
         if not isinstance(raw_input, str):
             if hasattr(raw_input, "value") and isinstance(raw_input.value, str):
                 raw_input = raw_input.value
@@ -550,13 +552,32 @@ with tab1:
             else:
                 try: raw_input = str(raw_input)
                 except: return DEFAULT_JSON_STR
+                
         cleaned = str(raw_input).strip()
+        
+        # Chặn các chuỗi rác hoặc lỗi giao diện lọt vào
         if "st.components.v1" in cleaned or "DeltaGenerator" in cleaned or "html" in cleaned:
             backup = st.session_state.get("current_sheet_json", DEFAULT_JSON_STR)
             if isinstance(backup, str) and backup.strip().startswith("{"):
                 return backup.strip()
             return DEFAULT_JSON_STR
-        return cleaned if (cleaned.startswith("{") and cleaned.endswith("}")) else DEFAULT_JSON_STR
+            
+        # 🔥 ÉP CHUỖI NHÁY ĐƠN PYTHON VỀ NHÁY KÉP JSON CHUẨN ĐỂ LƯU SUPABASE KHÔNG BỊ LỖI
+        if cleaned.startswith("{") and cleaned.endswith("}"):
+            try:
+                # Nếu chuỗi đã chuẩn JSON (dùng nháy kép), parse thử và giữ nguyên
+                parsed = json.loads(cleaned)
+                return json.dumps(parsed, ensure_ascii=False)
+            except Exception:
+                # Nếu chứa dấu nháy đơn kiểu {'cell_1_1': 'DO'}, dùng ast để dịch rồi ép lại nháy kép
+                import ast
+                try:
+                    parsed_obj = ast.literal_eval(cleaned)
+                    return json.dumps(parsed_obj, ensure_ascii=False)
+                except Exception:
+                    return DEFAULT_JSON_STR
+                    
+        return DEFAULT_JSON_STR
 
     # 🔐 Đảm bảo các biến State quản lý Iframe và Bài hát luôn tồn tại
     if "selected_sheet_id" not in st.session_state: st.session_state["selected_sheet_id"] = None
@@ -646,13 +667,12 @@ with tab1:
         else: 
             st.session_state["sheet_title_input"] = st.text_input(lang.get("input_title_label", "Tạo tên cho bản ghi mới:"), value=st.session_state["sheet_title_input"], key="new_title_input_field")
 
-    # 🎛️ 3. THANH HÀNH ĐỘNG BỐN NÚT (ĐÃ FIX CHỐNG XÓA / BẢNG TRẮNG)
+    # 🎛️ 3. THANH HÀNH ĐỘNG BỐN NÚT (ĐÃ FIX CHỐNG XÓA / BẢNG TRẮNG VÀ CHỐNG LỖI POSTGRES)
     st.write("")
     c_act1, c_act2, c_act3, c_act4 = st.columns([1, 1, 1, 1])
 
     with c_act1:
         if st.button(lang.get("btn_save", "💾 SAVE RECORD"), type="primary", use_container_width=True, key="btn_save_music_tab1"):  
-            # KIỂM TRA CHẶN DỮ LIỆU RỖNG TỪ IFRAME
             raw_data = st.session_state.get("iframe_data_store", "{}")
             if not raw_data or str(raw_data).strip() == "{}" or "cell_" not in str(raw_data):
                 raw_data = st.session_state.get("current_sheet_json", DEFAULT_JSON_STR)
@@ -683,12 +703,9 @@ with tab1:
 
     with c_act2:
         if st.button(lang.get("btn_reset", "🔄 RESET BLANK"), use_container_width=True, key="btn_reset_grid_tab1"):  
-            # Chỉ reset dữ liệu lưới nhạc về mặc định (bảng trống)
             st.session_state["current_sheet_json"] = DEFAULT_JSON_STR
             st.session_state["iframe_data_store"] = DEFAULT_JSON_STR
-            
             st.query_params.clear()
-            # Buộc Iframe render lại với lưới trống của bài hiện tại
             st.session_state["iframe_key"] = f"forced_reset_{time.time()}"
             st.toast(lang.get("msg_reset_success", "🧹 Đã xóa sạch các nốt trên lưới nhạc hiện tại!"))
             st.rerun()
@@ -699,7 +716,6 @@ with tab1:
                 st.query_params.clear()
                 dup_title = f"{st.session_state['sheet_title_input']} ({lang.get('copy_suffix', 'Bản sao')})"
 
-                # ƯU TIÊN LẤY TỪ DATABASE HOẶC KHÓA CỨNG ĐỂ CHỐNG BẢNG TRẮNG
                 record_goc = db.get_record_by_id(st.session_state["selected_sheet_id"])
                 if record_goc:
                     record_goc = dict(record_goc)
@@ -721,7 +737,6 @@ with tab1:
                 st.session_state["sheet_title_input"] = dup_title
                 st.session_state["current_sheet_json"] = dup_grid_data
                 st.session_state["iframe_data_store"] = dup_grid_data
-                
                 st.session_state["iframe_key"] = f"duplicate_{time.time()}"
                 st.toast(lang.get("msg_duplicate_success", "👯 Đã sao chép bản ghi nhạc thành công!"))
                 st.rerun()

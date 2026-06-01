@@ -242,14 +242,30 @@ def insert_record(title, data_json):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     current_user = st.session_state.get('logged_in_user', '')
     
+    # Ép dữ liệu thành chuỗi JSON nháy kép chuẩn
+    try:
+        if isinstance(data_json, (dict, list)):
+            clean_json_str = json.dumps(data_json, ensure_ascii=False)
+        elif isinstance(data_json, str):
+            try:
+                parsed_obj = json.loads(data_json)
+                clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
+            except Exception:
+                import ast
+                try:
+                    parsed_obj = ast.literal_eval(data_json)
+                    clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
+                except Exception:
+                    clean_json_str = data_json
+        else:
+            clean_json_str = str(data_json)
+    except Exception:
+        clean_json_str = str(data_json)
+
     if "sqlite" in DATABASE_URL:
-        # Nếu data_json lỡ là dict, SQLite vẫn nên nhận chuỗi json để đồng bộ
-        if isinstance(data_json, dict):
-            data_json = json.dumps(data_json, ensure_ascii=False)
-            
         cursor.execute(
             "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (?, ?, ?, ?, ?)",
-            (title, data_json, now, now, current_user)
+            (title, clean_json_str, now, now, current_user)
         )
         conn.commit()
         new_id = cursor.lastrowid
@@ -258,13 +274,9 @@ def insert_record(title, data_json):
         return new_id
     else:
         try:
-            # 🔥 SỬA LỖI CHÍ MẠNG: Nếu data_json đang là Dictionary, bắt buộc phải ép thành chuỗi TEXT JSON cho Postgres
-            if isinstance(data_json, dict):
-                data_json = json.dumps(data_json, ensure_ascii=False)
-                
             cursor.execute(
                 "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
-                (title, data_json, now, now, current_user)
+                (title, clean_json_str, now, now, current_user)
             )
             new_id = cursor.fetchone()[0]
             conn.commit()
@@ -285,26 +297,39 @@ def update_record_data(record_id, data_json):
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
+    # Ép dữ liệu thành chuỗi JSON nháy kép chuẩn
+    try:
+        if isinstance(data_json, (dict, list)):
+            clean_json_str = json.dumps(data_json, ensure_ascii=False)
+        elif isinstance(data_json, str):
+            try:
+                parsed_obj = json.loads(data_json)
+                clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
+            except Exception:
+                import ast
+                try:
+                    parsed_obj = ast.literal_eval(data_json)
+                    clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
+                except Exception:
+                    clean_json_str = data_json
+        else:
+            clean_json_str = str(data_json)
+    except Exception:
+        clean_json_str = str(data_json)
+    
     if "sqlite" in DATABASE_URL:
-        if isinstance(data_json, dict):
-            data_json = json.dumps(data_json, ensure_ascii=False)
-            
         cursor.execute(
             "UPDATE records SET data_json = ?, updated_at = ? WHERE id = ?",
-            (data_json, now, record_id)
+            (clean_json_str, now, record_id)
         )
         conn.commit()
         cursor.close()
         conn.close()
     else:
         try:
-            # 🔥 SỬA LỖI CHÍ MẠNG: Ép kiểu Dictionary thành chuỗi TEXT trước khi UPDATE lên Supabase
-            if isinstance(data_json, dict):
-                data_json = json.dumps(data_json, ensure_ascii=False)
-                
             cursor.execute(
                 "UPDATE records SET data_json = %s, updated_at = %s WHERE id = %s",
-                (data_json, now, record_id)
+                (clean_json_str, now, record_id)
             )
             conn.commit()
             cursor.close()
