@@ -190,27 +190,64 @@ conn.close()
 
 
 
-def check_or_create_user_local(email):
-    conn_u = sqlite3.connect("app.db", check_same_thread=False)
-    conn_u.row_factory = sqlite3.Row
-    cursor_u = conn_u.cursor()
-    cursor_u.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT UNIQUE,
-            role TEXT DEFAULT 'FREE'
-        )
-    """)
-    conn_u.commit()
-    cursor_u.execute("SELECT email, role FROM users WHERE email = ?", (email,))
-    row_u = cursor_u.fetchone()
-    if row_u:
-        result = dict(row_u)
-    else:
-        cursor_u.execute("INSERT INTO users (email, role) VALUES (?, 'FREE')", (email,))
+def check_or_create_user_real(email):
+    """Kiểm tra hoặc tạo mới user đồng bộ trên cả SQLite (Local) và Postgres (Supabase)"""
+    email_clean = email.strip().lower()
+    result = {"email": email_clean, "role": "FREE"}
+    
+    if "sqlite" in DATABASE_URL:
+        # --- XỬ LÝ TRÊN LOCAL (SQLITE) ---
+        conn_u = sqlite3.connect("app.db", check_same_thread=False)
+        conn_u.row_factory = sqlite3.Row
+        cursor_u = conn_u.cursor()
+        cursor_u.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE,
+                role TEXT DEFAULT 'FREE'
+            )
+        """)
         conn_u.commit()
-        result = {"email": email, "role": "FREE"}
-    conn_u.close()
+        cursor_u.execute("SELECT email, role FROM users WHERE email = ?", (email_clean,))
+        row_u = cursor_u.fetchone()
+        if row_u:
+            result = dict(row_u)
+        else:
+            cursor_u.execute("INSERT INTO users (email, role) VALUES (?, 'FREE')", (email_clean,))
+            conn_u.commit()
+            result = {"email": email_clean, "role": "FREE"}
+        conn_u.close()
+    else:
+        # --- XỬ LÝ TRÊN MÂY (SUPABASE POSTGRES) ---
+        clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
+        if clean_url.startswith("postgresql://"):
+            clean_url = clean_url.replace("postgresql://", "postgres://", 1)
+        
+        try:
+            conn_u = psycopg2.connect(clean_url, sslmode="require")
+            conn_u.autocommit = True
+            cursor_u = conn_u.cursor(cursor_factory=DictCursor)
+            
+            cursor_u.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE,
+                    role TEXT DEFAULT 'FREE'
+                );
+            """)
+            
+            cursor_u.execute("SELECT email, role FROM users WHERE email = %s", (email_clean,))
+            row_u = cursor_u.fetchone()
+            if row_u:
+                result = dict(row_u)
+            else:
+                cursor_u.execute("INSERT INTO users (email, role) VALUES (%s, 'FREE')", (email_clean,))
+                result = {"email": email_clean, "role": "FREE"}
+            cursor_u.close()
+            conn_u.close()
+        except Exception as e:
+            st.error(f"Lỗi đồng bộ User trên Supabase: {str(e)}")
+            
     return result
 
 
@@ -232,7 +269,7 @@ cookie_email = controller.get("mydoje_user_email")
 active_email = st.session_state.user_email if st.session_state.user_email else cookie_email
 
 if active_email:
-    user_record = check_or_create_user_local(active_email)
+    user_record = check_or_create_user_real(active_email)
     st.session_state.authenticated = True
     st.session_state.user_email = active_email
     st.session_state["logged_in_user"] = active_email
@@ -248,7 +285,7 @@ if authenticator:
         user_info = st.session_state.get("user_info", {})
         user_email = user_info.get("email") or st.session_state.get("email")
         if user_email:
-            user_record = check_or_create_user_local(user_email)
+            user_record = check_or_create_user_real(user_email)
             st.session_state.authenticated = True
             st.session_state.user_email = user_email
             st.session_state["logged_in_user"] = user_email
@@ -257,16 +294,26 @@ if authenticator:
             controller.set("mydoje_user_role", user_record["role"])
             time.sleep(0.2)
 
-if "code" in st.query_params and not st.session_state.authenticated:
-    st.session_state.authenticated = True
-    st.session_state.user_email = "user.oauth2@gmail.com"
-    st.session_state["logged_in_user"] = "user.oauth2@gmail.com"
-    st.session_state["user_role"] = "FREE"  
-    controller.set("mydoje_user_email", "user.oauth2@gmail.com")
-    controller.set("mydoje_user_role", "FREE")
-    time.sleep(0.2)
-    st.query_params.clear()
-    st.rerun()
+# --- XỬ LÝ LẤY EMAIL THẬT KHI ĐĂNG NHẬP GOOGLE SUCCESS ---
+if authenticator and not st.session_state.authenticated:
+    try:
+        # Kiểm tra xem Authenticator đã bắt được token thành công chưa
+        if st.session_state.get("connected", False) or "code" in st.query_params:
+            user_info = authenticator.get_user_info() if hasattr(authenticator, 'get_user_info') else st.session_state.get("user_info", {})
+            user_email = user_info.get("email") if user_info else None
+            
+            if user_email:
+                user_record = check_or_create_user_real(user_email)
+                st.session_state.authenticated = True
+                st.session_state.user_email = user_record["email"]
+                st.session_state["logged_in_user"] = user_record["email"]
+                st.session_state["user_role"] = user_record["role"]  # Quyền thật lấy từ DB
+                controller.set("mydoje_user_email", user_record["email"])
+                controller.set("mydoje_user_role", user_record["role"])
+                st.query_params.clear()
+                st.rerun()
+    except Exception as e:
+        pass
 
 
 # =================================================================
@@ -364,73 +411,176 @@ except Exception as e:
     
 
 # =================================================================
-# GIAO DIỆN ĐĂNG NHẬP
+# GIAO DIỆN ĐĂNG NHẬP CHUYÊN NGHIỆP (ĐÃ ĐỒNG BỘ LANG JSON)
 # =================================================================
 if not st.session_state.authenticated:
-    st.title(lang["app_title"])
-    st.subheader("🔐 LOGIN / PERMISSION CONTROL")
+    # Ép form đăng nhập vào chính giữa màn hình (Tỷ lệ 1:1.8:1)
+    side_col1, main_login_col, side_col3 = st.columns([1, 1.8, 1])
     
-    test_role = st.selectbox("Simulate Account Rank / Giả lập hạng:", ["FREE", "PREMIUM", "ADMIN"], key="login_simulate_role_box")
-    auth_method = st.radio("Authentication Method / Phương thức đăng nhập:", ["Google Login", "Email OTP"], horizontal=True, key="login_auth_method_radio")
-    
-    if auth_method == "Google Login":
-        if authenticator:
-            with st.container(): authenticator.login()
-        else:
-            google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
-            st.markdown(f'<a href="{google_auth_url}" target="_self" style="text-decoration:none;"><div style="background-color: #df4930; color: white; text-align: center; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer;">🛑 LOGIN WITH GOOGLE ACCOUNT</div></a>', unsafe_allow_html=True)
+    with main_login_col:
+        st.write("") 
+        st.write("") 
+        
+        # Tạo khung bao bọc (Card Container) cho form đăng nhập
+        with st.container(border=True):
+            # Lấy title ứng dụng từ file JSON ngôn ngữ công nghệ
+            app_title_lbl = lang.get("app_title", "👑 KHUNG MYDJ")
+            st.markdown(
+                f"<h2 style='text-align: center; margin-bottom: 5px;'>🔒 {app_title_lbl}</h2>", 
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                f"<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>{lang.get('auth_subtitle', 'HỆ THỐNG XÁC THỰC TRUY CẬP AN TOÀN')}</p>", 
+                unsafe_allow_html=True
+            )
             
-    elif auth_method == "Email OTP":
-        email_input = st.text_input("Enter Email / Nhập Email:", placeholder="example@gmail.com", key="login_email_input_field")
-        if "generated_otp" not in st.session_state: 
-            st.session_state.generated_otp = ""
-            st.session_state.target_email = ""
+            # Khởi tạo Tabs lựa chọn phương thức đăng nhập dịch nghĩa động
+            lbl_tab_google = lang.get("tab_google_title", "🌐 Đăng nhập Google")
+            lbl_tab_email = lang.get("tab_email_title", "✉️ Nhận mã Email OTP")
+            tab_google, tab_email = st.tabs([lbl_tab_google, lbl_tab_email])
             
-        if st.session_state.generated_otp == "":
-            if st.button("Send OTP to Email", key="login_send_otp_btn"):
-                if email_input.strip():
-                    def send_otp_email_inner(receiver_email, otp_code):
-                        try:
-                            msg = MIMEMultipart()
-                            msg['From'] = SENDER_EMAIL
-                            msg['To'] = receiver_email
-                            msg['Subject'] = f"[{otp_code}] Verification Code"
-                            body = f"<h3>Your OTP Verification code is: <b style='font-size: 20px; color: #1b8a5a;'>{otp_code}</b></h3>"
-                            msg.attach(MIMEText(body, 'html', 'utf-8'))
-                            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-                                server.login(SENDER_EMAIL, SENDER_PASSWORD)
-                                server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
-                            return True
-                        except: return False
+            # --- TAB 1: GOOGLE OAUTH ---
+            with tab_google:
+                st.write("")
+                if authenticator:
+                    with st.container(): 
+                        authenticator.login()
+                else:
+                    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={GOOGLE_CLIENT_ID}&redirect_uri={GOOGLE_REDIRECT_URI}&response_type=code&scope=openid%20email%20profile"
+                    
+                    # Nút bấm Google chuẩn CSS phẳng lịch lãm
+                    lbl_goole_btn = lang.get("btn_google_login", "Tiếp tục với tài khoản Google")
+                    google_btn_html = f"""
+                    <a href="{google_auth_url}" target="_self" style="text-decoration: none;">
+                        <div style="
+                            display: flex; 
+                            align-items: center; 
+                            justify-content: center; 
+                            background-color: #ffffff; 
+                            color: #757575; 
+                            border: 1px solid #ddd;
+                            padding: 10px 16px; 
+                            border-radius: 6px; 
+                            font-weight: 600; 
+                            font-family: sans-serif;
+                            cursor: pointer;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                            transition: background-color 0.2s;
+                            margin: 15px 0;">
+                            <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/web-24dp/logo_googleg_color_24dp.png" style="width:18px; margin-right:10px;"/>
+                            {lbl_goole_btn}
+                        </div>
+                    </a>
+                    """
+                    st.markdown(google_btn_html, unsafe_allow_html=True)
+                st.write("")
+            
+            # --- TAB 2: EMAIL OTP ---
+            with tab_email:
+                st.write("")
+                
+                if "generated_otp" not in st.session_state: 
+                    st.session_state.generated_otp = ""
+                    st.session_state.target_email = ""
+                
+                # Trạng thái 2a: Chưa tạo mã -> Đòi nhập email để nhận mã 6 số
+                if st.session_state.generated_otp == "":
+                    lbl_email_placeholder = lang.get("email_input_placeholder", "Nhập địa chỉ Email của bạn...")
+                    email_input = st.text_input(
+                        "Email Input Field",
+                        placeholder=lbl_email_placeholder, 
+                        key="login_email_input_field",
+                        label_visibility="collapsed"
+                    )
+                    
+                    st.write("")
+                    lbl_btn_send = lang.get("btn_send_otp", "Gửi mã xác thực OTP")
+                    if st.button(lbl_btn_send, type="primary", use_container_width=True, key="login_send_otp_btn"):
+                        if email_input.strip():
+                            if not re.match(r"[^@]+@[^@]+\.[^@]+", email_input.strip()):
+                                st.error(lang.get("msg_invalid_email", "Định dạng Email không đúng quy định!"))
+                            else:
+                                def send_otp_email_inner(receiver_email, otp_code):
+                                    try:
+                                        msg = MIMEMultipart()
+                                        msg['From'] = SENDER_EMAIL
+                                        msg['To'] = receiver_email
+                                        msg['Subject'] = f"[{otp_code}] " + lang.get("email_subject_otp", "Mã xác thực tài khoản MYDJ")
+                                        body = f"""
+                                        <div style='font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px;'>
+                                            <h2 style='color: #1b8a5a;'>Xác thực đăng nhập</h2>
+                                            <p>Mã kiểm tra của bạn có hiệu lực trong vòng 5 phút:</p>
+                                            <div style='background: #f4f4f4; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; letter-spacing: 4px; color: #1b8a5a; border-radius: 4px;'>{otp_code}</div>
+                                            <p style='font-size: 12px; color: #888; margin-top: 20px;'>Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email.</p>
+                                        </div>
+                                        """
+                                        msg.attach(MIMEText(body, 'html', 'utf-8'))
+                                        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+                                            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+                                            server.sendmail(SENDER_EMAIL, receiver_email, msg.as_string())
+                                        return True
+                                    except: 
+                                        return False
 
-                    otp = str(random.randint(100000, 999999))
-                    if send_otp_email_inner(email_input.strip(), otp):
-                        st.session_state.generated_otp = otp
-                        st.session_state.target_email = email_input.strip()
-                        st.success("OTP Code has been sent successfully!")
-                        st.rerun()
+                                otp = str(random.randint(100000, 999999))
+                                with st.spinner(lang.get("msg_sending", "Đang gửi mã...")):
+                                    if send_otp_email_inner(email_input.strip(), otp):
+                                        st.session_state.generated_otp = otp
+                                        st.session_state.target_email = email_input.strip().lower()
+                                        st.toast(lang.get("msg_otp_sent", "Đã gửi mã OTP thành công!"), icon="✉️")
+                                        time.sleep(0.5)
+                                        st.rerun()
+                                    else:
+                                        st.error("Lỗi cấu hình hệ thống SMTP! Không gửi được thư.")
+                        else:
+                            st.warning(lang.get("msg_empty_email", "Vui lòng điền địa chỉ Email!"))
+                
+                # Trạng thái 2b: Đã gửi mã -> Đòi nhập mã OTP để mở khóa
                 else:
-                    st.warning("Please input an email address first!")
-        else:
-            otp_code = st.text_input("Enter 6-digit OTP:", type="password", key="login_otp_code_verify_field")
-            if st.button("Confirm Login", type="primary", key="login_confirm_submit_btn"):
-                if otp_code == st.session_state.generated_otp:
-                    user_rec = check_or_create_user_local(st.session_state.target_email)
-                    final_role = test_role if test_role != "FREE" else user_rec["role"]
+                    msg_sent_alert = lang.get("msg_sent_to", "Mã OTP đã được gửi đến:")
+                    st.info(f"{msg_sent_alert} **{st.session_state.target_email}**")
                     
-                    st.session_state.authenticated = True
-                    st.session_state.user_email = st.session_state.target_email
-                    st.session_state["logged_in_user"] = st.session_state.target_email
-                    st.session_state["user_role"] = final_role
+                    otp_code = st.text_input(
+                        lang.get("otp_input_label", "Nhập mã gồm 6 chữ số:"), 
+                        type="default", 
+                        placeholder="______",
+                        max_chars=6,
+                        key="login_otp_code_verify_field"
+                    )
                     
-                    controller.set("mydoje_user_email", st.session_state.target_email)
-                    controller.set("mydoje_user_role", final_role)
-                    time.sleep(0.3)
-                    st.rerun()
-                else:
-                    st.error("Invalid OTP Code!")
+                    st.write("")
+                    col_confirm, col_cancel = st.columns([2, 1])
+                    
+                    with col_confirm:
+                        lbl_btn_confirm = lang.get("btn_confirm_login", "Xác nhận Đăng nhập")
+                        if st.button(lbl_btn_confirm, type="primary", use_container_width=True, key="login_confirm_submit_btn"):
+                            if otp_code.strip() == st.session_state.generated_otp:
+                                # Lấy phân quyền thực tế từ Database thông qua email sạch
+                                user_rec = check_or_create_user_real(st.session_state.target_email)
+                                
+                                st.session_state.authenticated = True
+                                st.session_state.user_email = user_rec["email"]
+                                st.session_state["logged_in_user"] = user_rec["email"]
+                                st.session_state["user_role"] = user_rec["role"] 
+                                
+                                controller.set("mydoje_user_email", user_rec["email"])
+                                controller.set("mydoje_user_role", user_rec["role"])
+                                st.toast(lang.get("msg_login_success", "Đăng nhập thành công!"), icon="🎉")
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                st.error(lang.get("msg_wrong_otp", "Mã OTP không chính xác, vui lòng kiểm tra lại!"))
+                    
+                    with col_cancel:
+                        lbl_btn_cancel = lang.get("btn_cancel", "Hủy")
+                        if st.button(lbl_btn_cancel, use_container_width=True, key="login_cancel_otp_btn"):
+                            st.session_state.generated_otp = ""
+                            st.session_state.target_email = ""
+                            st.rerun()
+                            
+            st.markdown("<div style='min-height: 10px;'></div>", unsafe_allow_html=True)
+            
     st.stop()
-
 
 # =================================================================
 # 🏢 GIAO DIỆN CHÍNH TRÊN ĐẦU TRANG (TOP NAVBAR)

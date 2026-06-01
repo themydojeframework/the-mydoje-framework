@@ -114,5 +114,24 @@
   "step_2_title": "Step 2:",
   "step_2_desc": "Click on the cell to edit or delete content.",
   "step_3_title": "Step 3:",
-  "step_3_desc": "Press the **SAVE** button to store the record into the Database."
+  "step_3_desc": "Press the **SAVE** button to store the record into the Database.",
+
+  "__COMMENT_7__": "================ AUTH NEW INTERFACE ================",
+  "auth_subtitle": "SECURE IDENTITY VERIFICATION SYSTEM",
+  "tab_google_title": "🌐 Google Login",
+  "tab_email_title": "✉️ Email OTP",
+  "btn_google_login": "Continue with Google Account",
+  "email_input_placeholder": "username@gmail.com",
+  "btn_send_otp": "Send Verification OTP",
+  "msg_invalid_email": "Invalid email address format!",
+  "email_subject_otp": "Security Verification Code",
+  "msg_sending": "Sending secure code...",
+  "msg_otp_sent": "OTP code has been dispatched to your inbox!",
+  "msg_empty_email": "Please input your email address first!",
+  "msg_sent_to": "An OTP code has been delivered to:",
+  "otp_input_label": "Enter 6-digit confirmation code:",
+  "btn_confirm_login": "Confirm Secure Login",
+  "msg_login_success": "Authentication successful!",
+  "msg_wrong_otp": "Incorrect OTP code. Please verify and try again!",
+  "btn_cancel": "Cancel / Change"
 }

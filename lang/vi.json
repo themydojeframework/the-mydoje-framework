@@ -114,5 +114,24 @@
   "step_2_title": "Bước 2:",
   "step_2_desc": "Bấm vào ô để sửa hay xóa nội dung.",
   "step_3_title": "Bước 3:",
-  "step_3_desc": "Nhấn nút **SAVE** để lưu bản ghi vào Database."
+  "step_3_desc": "Nhấn nút **SAVE** để lưu bản ghi vào Database.",
+
+  "__COMMENT_7__": "================ GIAO DIỆN XÁC THỰC MỚI ================",
+  "auth_subtitle": "HỆ THỐNG XÁC THỰC TRUY CẬP AN TOÀN",
+  "tab_google_title": "🌐 Đăng nhập Google",
+  "tab_email_title": "✉️ Nhận mã Email OTP",
+  "btn_google_login": "Tiếp tục với tài khoản Google",
+  "email_input_placeholder": "Nhập địa chỉ Email của bạn...",
+  "btn_send_otp": "Gửi mã xác thực OTP",
+  "msg_invalid_email": "Định dạng Email không đúng quy định!",
+  "email_subject_otp": "Mã xác thực tài khoản bảo mật",
+  "msg_sending": "Đang gửi mã bảo mật...",
+  "msg_otp_sent": "Mã OTP đã được gửi thành công vào hộp thư của bạn!",
+  "msg_empty_email": "Vui lòng điền địa chỉ Email!",
+  "msg_sent_to": "Mã OTP kiểm tra đã được gửi đến:",
+  "otp_input_label": "Nhập mã gồm 6 chữ số xác nhận:",
+  "btn_confirm_login": "Xác nhận Đăng nhập",
+  "msg_login_success": "Xác thực danh tính thành công!",
+  "msg_wrong_otp": "Mã OTP không chính xác, vui lòng kiểm tra lại!",
+  "btn_cancel": "Hủy / Đổi Email"
 }
