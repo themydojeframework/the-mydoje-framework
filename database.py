@@ -12,21 +12,28 @@ load_dotenv()
 # Lấy cấu hình URL kết nối thông minh
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 
-
-# Tự động nắn đầu ngữ về postgres:// nếu cấu hình trên Cloud đang để postgresql://
-if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgres://", 1)
-
 def get_connection():
     """Tự động kết nối tới đúng hệ quản trị cơ sở dữ liệu dựa theo môi trường."""
+    global DATABASE_URL
+    
     if "sqlite" in DATABASE_URL:
         conn = sqlite3.connect("app.db", check_same_thread=False)
         conn.row_factory = sqlite3.Row  # Trả về dạng Row đối với SQLite
         return conn
     else:
-        # Kết nối tới Supabase PROD
-        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-        return conn
+        # 🔥 KHÓA BẢO VỆ 1: Làm sạch chuỗi và đồng bộ đầu ngữ cho đúng gu của psycopg2
+        clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
+        if clean_url.startswith("postgresql://"):
+            clean_url = clean_url.replace("postgresql://", "postgres://", 1)
+            
+        try:
+            # 🔥 KHÓA BẢO VỆ 2: Kết nối thẳng bằng cổng 5432 trực tiếp từ Secrets
+            conn = psycopg2.connect(clean_url, sslmode="require")
+            return conn
+        except Exception as e:
+            # Nếu có lỗi (như sai mật khẩu, sai cú pháp...), ép hiện lỗi thật ra giao diện Streamlit!
+            st.error(f"💥 LỖI KẾT NỐI SUPABASE THỰC TẾ: {str(e)}")
+            raise e
 
 def init_db():
     """Khởi tạo toàn bộ hệ thống bảng và tự động cập nhật cột thiếu cho cả 2 môi trường."""
