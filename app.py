@@ -1323,36 +1323,7 @@ with tab1:
         """)
 
 
-# =====================================================================
-# 🤠 KHU VỰC ADMIN: ĐẶT NGAY TẠI ĐÂY (NẰM TRƯỚC CÁC TAB)
-# =====================================================================
-if st.session_state.get("user_role") == "ADMIN":
-    st.title("🤠 TRANG QUẢN TRỊ ADMIN - ĐĂNG BÀI PREMIUM")
-    target_tab = st.selectbox("Chọn chuyên mục muốn đăng bài:", ["Morning Boost", "Deep Sleep"])
-    table_mapping = {"Morning Boost": "morning_boost", "Deep Sleep": "deep_sleep"}
-    
-    post_title = st.text_input("Tiêu đề bài học/bài viết:")
-    post_video = st.text_input("Đường dẫn Video (YouTube URL):")
-    post_html = st.text_area("Nội dung HTML (Bọc các đoạn bằng <div class='yoga-card'>...</div>):", height=200, key="admin_html_area")
 
-    if st.button("🚀 XUẤT BẢN BÀI VIẾT", key="admin_publish_btn"):
-        if post_title.strip() == "":
-            st.error("Vui lòng nhập tiêu đề bài viết!")
-        else:
-            success = db.insert_premium_post(
-                table_name=table_mapping[target_tab],
-                title=post_title,
-                video_url=post_video,
-                content_html=post_html
-            )
-            if success:
-                st.success(f"🎉 Đã thêm thành công bài viết mới vào chuyên mục {target_tab}!")
-                st.rerun()
-            else:
-                st.error("Có lỗi xảy ra khi lưu vào Database.")
-    st.write("---")
-    
-    
 
 
 # ---------------------------------------------------------------------

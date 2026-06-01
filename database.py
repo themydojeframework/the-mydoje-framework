@@ -365,60 +365,36 @@ def delete_record(record_id):
 # PHẦN 3: CÁC HÀM XỬ LÝ NỘI DUNG PREMIUM (TAB 2 & TAB 3)
 # ==========================================
 
-# ==========================================
-# PHẦN 3: CÁC HÀM XỬ LÝ CHO BẢNG MỚI (CÓ PHÂN TRANG VÀ ĐẾM TỔNG)
-# ==========================================
+def get_yoga_data_by_id(content_id):
+    conn = get_connection()
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
+        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = ?", (content_id,))
+        row = cursor.fetchone()
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = %s", (content_id,))
+        row = cursor.fetchone()
+        
+    result = dict(row) if row else None
+    cursor.close()
+    conn.close()
+    return result
 
-def insert_premium_post(table_name, title, video_url, content_html):
-    """Admin thêm bài viết mới vào bảng chỉ định (morning_boost hoặc deep_sleep)"""
-    if table_name not in ["morning_boost", "deep_sleep"]:
-        return False
+
+def update_yoga_data(content_id, video_url, content_html):
     conn = get_connection()
     cursor = conn.cursor()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
     if "sqlite" in DATABASE_URL:
         cursor.execute(
-            f"INSERT INTO {table_name} (title, video_url, content_html, created_at) VALUES (?, ?, ?, ?)",
-            (title, video_url, content_html, now)
+            "UPDATE yoga_data SET video_url = ?, content_html = ? WHERE id = ?",
+            (video_url, content_html, content_id)
         )
     else:
         cursor.execute(
-            f"INSERT INTO {table_name} (title, video_url, content_html, created_at) VALUES (%s, %s, %s, %s)",
-            (title, video_url, content_html, now)
+            "UPDATE yoga_data SET video_url = %s, content_html = %s WHERE id = %s",
+            (video_url, content_html, content_id)
         )
     conn.commit()
     cursor.close()
     conn.close()
-    return True
-
-def get_premium_posts_with_pagination(table_name, limit=3, offset=0):
-    """Lấy danh sách bài viết theo trang (Mỗi trang tối đa `limit` bài, bỏ qua `offset` bài đầu)"""
-    if table_name not in ["morning_boost", "deep_sleep"]:
-        return []
-    conn = get_connection()
-    
-    if "sqlite" in DATABASE_URL:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
-        rows = [dict(row) for row in cursor.fetchall()]
-    else:
-        cursor = conn.cursor(cursor_factory=DictCursor)
-        cursor.execute(f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT %s OFFSET %s", (limit, offset))
-        rows = [dict(row) for row in cursor.fetchall()]
-        
-    cursor.close()
-    conn.close()
-    return rows
-
-def get_total_posts_count(table_name):
-    """Đếm tổng số bài viết đang có trong bảng để tính toán số lượng trang Google (1, 2, 3...)"""
-    if table_name not in ["morning_boost", "deep_sleep"]:
-        return 0
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-    total = cursor.fetchone()[0]
-    cursor.close()
-    conn.close()
-    return total

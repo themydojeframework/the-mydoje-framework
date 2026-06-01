@@ -3,17 +3,15 @@ import database as db
 import re
 import time
 import smtplib
-import math
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import random
 
 # =====================================================================
 # 🛠️ 1. CẤU HÌNH TRANG & ĐA NGÔN NGỮ KHỞI TẠO
 # =====================================================================
 st.set_page_config(page_title="🔑 MYDOJE - ADMINISTRATIVE CONTROL", layout="wide", page_icon="🔑")
 
-# Khởi tạo database nếu chưa có (Tự động chạy lệnh migration tách bảng mới của database.py)
+# Khởi tạo database nếu chưa có
 try:
     db.init_db()
 except Exception as e:
@@ -33,6 +31,16 @@ lang = {
     "msg_update_success": "🎉 Đã cập nhật nội dung bài học thành công!"
 }
 
+import random  # Bổ sung thư viện này ở đầu file nếu chưa có
+
+import random
+import re
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import streamlit as st
+
 # Giả định danh sách quản trị viên tối cao được phép truy cập hệ thống
 ADMIN_WHITELIST = ["admin@mydoje.com", "themydojeframework@gmail.com"]
 
@@ -51,10 +59,13 @@ if "temp_admin_email" not in st.session_state:
     st.session_state["temp_admin_email"] = ""
 
 # --- XỬ LÝ ĐĂNG NHẬP GOOGLE BIẾN TRẢ VỀ (REDIRECT OAUTH2) ---
+# Đoạn này xử lý nếu bạn nhấn nút Google và được Google trả ngược email về URL
 query_params = st.query_params
 if "code" in query_params and not st.session_state["admin_logged_in"]:
     try:
-        google_email = "themydojeframework@gmail" # Dòng này thay bằng hàm lấy email thật từ Google của bạn
+        # 💡 Phần này kết nối với hàm hứng token và đọc email Google giống y hệt file app.py của bạn.
+        # Ở đây là logic kiểm tra giả định sau khi lấy được google_email từ API:
+        google_email = "themydoje@gmail.com" # Dòng này thay bằng hàm lấy email thật từ Google của bạn
         
         if google_email in ADMIN_WHITELIST:
             user_in_db = db.check_or_create_user(google_email)
@@ -63,7 +74,7 @@ if "code" in query_params and not st.session_state["admin_logged_in"]:
             
             st.session_state["admin_logged_in"] = True
             st.session_state["admin_user"] = google_email
-            st.query_params.clear() 
+            st.query_params.clear() # Xóa tham số code trên URL
             st.rerun()
         else:
             st.error("Tài khoản Google này không có quyền truy cập vùng Quản trị!")
@@ -82,10 +93,14 @@ if not st.session_state["admin_logged_in"]:
             st.markdown("<h2 style='text-align: center; margin-bottom: 5px;'>🔒 ADMIN PANEL</h2>", unsafe_allow_html=True)
             st.markdown("<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>Hệ thống xác thực quyền điều hành tối cao</p>", unsafe_allow_html=True)
             
+            # -----------------------------------------------------------------
+            # PHƯƠNG THỨC 1: ĐĂNG NHẬP GOOGLE OAUTH2 (NÚT BẤM NHANH)
+            # -----------------------------------------------------------------
             if not st.session_state["admin_otp_sent"]:
+                # Cấu hình URL OAuth2 Google (Lấy CLIENT_ID và REDIRECT_URI từ Secrets giống app.py)
                 try:
                     client_id = st.secrets["google"]["client_id"]
-                    redirect_uri = st.secrets["google"]["redirect_uri"] 
+                    redirect_uri = st.secrets["google"]["redirect_uri"] # URL trang admin.py này trên cloud
                     google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope=openid%20email%20profile"
                     
                     google_btn_html = f"""
@@ -102,6 +117,10 @@ if not st.session_state["admin_logged_in"]:
                 
                 st.markdown("<div style='text-align: center; color: #bbb; margin-bottom: 15px; font-size: 12px;'>— HOẶC SỬ DỤNG MÃ OTP EMAIL —</div>", unsafe_allow_html=True)
 
+            # -----------------------------------------------------------------
+            # PHƯƠNG THỨC 2: ĐĂNG NHẬP OTP EMAIL (2 GIAO ĐOẠN)
+            # -----------------------------------------------------------------
+            # GIAO ĐOẠN 1: CHƯA GỬI OTP -> BẮT NHẬP EMAIL
             if not st.session_state["admin_otp_sent"]:
                 email_input = st.text_input(
                     "Địa chỉ Email Quản trị viên:", 
@@ -122,29 +141,37 @@ if not st.session_state["admin_logged_in"]:
                             otp_generated = str(random.randint(100000, 999999))
                             
                             try:
+                                # Khởi tạo cấu hình và gọi Mail thật bằng SMTP (Multipart thay vì Plain text)
                                 msg = MIMEMultipart('alternative')
                                 msg['From'] = st.secrets["smtp"]["user"]
                                 msg['To'] = email_input
                                 msg['Subject'] = "🔒 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
 
+                                # Thiết kế giao diện HTML/CSS nâng cấp cho Mail
                                 html_content = f"""
                                 <html>
                                   <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 20px; margin: 0;">
                                     <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #FF4B4B;">
+                                      
                                       <h2 style="color: #1E1E1E; text-align: center; margin-top: 0; font-size: 22px;">🔒 Xác Thực Hệ Thống</h2>
+                                      
                                       <p style="color: #555555; font-size: 15px; line-height: 1.6; text-align: center;">
                                         Bạn đang yêu cầu truy cập vào ban điều hành tối cao của <strong>MyDoJe</strong>.<br>
                                         Vui lòng sử dụng mã OTP bảo mật dưới đây:
                                       </p>
+                                      
+                                      <!-- Ô HIỂN THỊ MÃ OTP NỔI BẬT RỰC RỠ -->
                                       <div style="background: #FFF0F0; border: 2px dashed #FF4B4B; border-radius: 8px; padding: 15px; text-align: center; margin: 25px 0;">
                                         <span style="font-size: 36px; font-weight: bold; color: #FF4B4B; letter-spacing: 6px; font-family: monospace;">
                                           {otp_generated}
                                         </span>
                                       </div>
+                                      
                                       <p style="color: #999999; font-size: 13px; text-align: center; margin-bottom: 0;">
                                         ⏳ Mã này có hiệu lực trong vòng <strong>5 phút</strong>.<br>
                                         Nếu không phải bạn thực hiện, vui lòng bỏ qua email này.
                                       </p>
+                                      
                                     </div>
                                   </body>
                                 </html>
@@ -157,6 +184,7 @@ if not st.session_state["admin_logged_in"]:
                                 server.sendmail(st.secrets["smtp"]["user"], email_input, msg.as_string())
                                 server.quit()
 
+                                # Lưu trạng thái thành công
                                 st.session_state["admin_otp_code"] = otp_generated
                                 st.session_state["temp_admin_email"] = email_input
                                 st.session_state["admin_otp_sent"] = True
@@ -167,6 +195,7 @@ if not st.session_state["admin_logged_in"]:
                             except Exception as e:
                                 st.error(f"Lỗi gửi mail hệ thống: {e}. Vui lòng kiểm tra lại cấu hình mục Secrets của App này.")
                                 
+            # GIAO ĐOẠN 2: ĐÃ GỬI OTP -> BẮT NHẬP MÃ XÁC THỰC CHÍNH XÁC
             else:
                 st.success(f"Mã OTP đã được gửi đến: **{st.session_state['temp_admin_email']}**")
                 
@@ -186,6 +215,7 @@ if not st.session_state["admin_logged_in"]:
                 if btn_confirm:
                     if otp_input == st.session_state["admin_otp_code"]:
                         user_in_db = db.check_or_create_user(st.session_state["temp_admin_email"])
+                        
                         if user_in_db["role"] != "ADMIN":
                             db.update_user_role(st.session_state["temp_admin_email"], "ADMIN")
                             
@@ -210,10 +240,7 @@ if not st.session_state["admin_logged_in"]:
 st.title(lang["admin_title"])
 st.caption(f"Trạng thái phiên: 🟢 Đã kết nối hệ thống | Tài khoản điều hành: **{st.session_state['admin_user']}**")
 
-# Cấu hình màu sắc giao diện phục vụ khối preview của Admin giống phía học viên
-theme_css = {'sheet_bg': '#1e1e1e', 'text_color': '#ffffff', 'border_color': '#333333'}
-
-# Khởi tạo các phân hệ Quản trị chính xác theo cấu trúc
+# Khởi tạo Tabs quản trị chuyên sâu
 tab_users, tab_manage_belly, tab_manage_yoga = st.tabs([
     lang["tab1_title"], 
     lang["tab2_title"], 
@@ -221,15 +248,20 @@ tab_users, tab_manage_belly, tab_manage_yoga = st.tabs([
 ])
 
 # =====================================================================
-# 👥 TAB 1: KHU VỰC QUẢN LÝ USER, PHÂN QUYỀN, XÓA BẢN GHI NHANH (GIỮ NGUYÊN VẸN)
+# 👥 TAB 1: KHU VỰC QUẢN LÝ USER, PHÂN QUYỀN, XÓA BẢN GHI NHANH
 # =====================================================================
 with tab_users:
     st.write("")
+    
+    # Trích xuất toàn bộ dữ liệu bản ghi nhạc từ database
     all_sheets = db.get_all_records()
+    
+    # Gom nhóm danh sách người dùng duy nhất từ lịch sử bài nhạc
     unique_emails = sorted(list(set([sheet.get("user_email", "").strip() for sheet in all_sheets if sheet.get("user_email")])))
     if "admin@mydoje.com" not in unique_emails:
         unique_emails.append("admin@mydoje.com")
 
+    # --- BLOCK 1: BỘ LỌC TÌM KIẾM THÔNG MINH ---
     with st.container(border=True):
         st.markdown("#### 🔍 Bộ Lọc Tìm Kiếm Thành Viên")
         c_flt1, c_flt2 = st.columns([2, 1])
@@ -239,6 +271,8 @@ with tab_users:
             filter_role = st.selectbox("💎 Nhóm phân quyền:", ["TẤT CẢ", "FREE", "PREMIUM", "ADMIN", "BANNED"])
 
     st.write("")
+    
+    # --- BLOCK 2: GRID DANH SÁCH CHI TIẾT ---
     st.markdown("### 👤 Danh Sách Thành Viên & Quyền Hạn")
     
     for email in unique_emails:
@@ -253,6 +287,7 @@ with tab_users:
             
         user_sheet_count = sum(1 for s in all_sheets if s.get("user_email", "").strip().lower() == email.lower())
         
+        # Thiết kế dạng Khung phẳng (Bordered Container) tối giản, hiện đại
         with st.container(border=True):
             col_u1, col_u2, col_u3, col_u4 = st.columns([3, 2, 2.5, 2.5])
             
@@ -288,6 +323,7 @@ with tab_users:
                         st.rerun()
                         
             with col_u4:
+                # Quản lý danh sách bài hát qua Popover thanh lịch
                 with st.popover(f"🎵 Thư viện bài ({user_sheet_count})", use_container_width=True):
                     user_sheets = [s for s in all_sheets if s.get("user_email", "").strip().lower() == email.lower()]
                     if not user_sheets:
@@ -303,146 +339,61 @@ with tab_users:
                                 st.rerun()
 
 # =====================================================================
-# 💃 TAB 2: BIÊN TẬP KHÓA HỌC / TIN TỨC BELLY DANCE (BẢNG: morning_boost)
+# 💃 TAB 2: BIÊN TẬP NỘI DUNG BELLY DANCE (ID = 2)
 # =====================================================================
 with tab_manage_belly:
     st.write("")
-    st.markdown("### 📝 ĐĂNG BÀI VIẾT BELLY DANCE MỚI (CHUYÊN MỤC: MORNING BOOST)")
+    st.markdown("### 📝 BIÊN TẬP KHÓA HỌC BELLY DANCE PREMIUM")
     
-    # 1. Form nhập bài viết lưu lịch sử vào bảng morning_boost
+    belly_data = db.get_yoga_data_by_id(2)
+    current_belly_url = belly_data["video_url"] if belly_data else "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    current_belly_html = belly_data["content_html"] if belly_data else '<div class="yoga-card">Đoạn 1 trống</div><div class="yoga-card">Đoạn 2 trống</div>'
+    
+    blocks_b = re.findall(r'<div class="yoga-card">\s*(.*?)\s*</div>', current_belly_html, re.DOTALL)
+    b_txt_1 = blocks_b[0] if len(blocks_b) >= 1 else "Nhập nội dung phân đoạn 1..."
+    b_txt_2 = blocks_b[1] if len(blocks_b) >= 2 else "Nhập nội dung phân đoạn 2..."
+    
+    # Form điền dữ liệu đồng bộ
     with st.container(border=True):
-        b_title = st.text_input("🏷️ Tiêu đề bài giảng / tin tức:", placeholder="Nhập tiêu đề bài viết Belly Dance...", key="b_title_in")
-        b_url = st.text_input("🎥 Đường dẫn Video bài học (YouTube URL):", placeholder="https://www.youtube.com/watch?v=...", key="b_url_in")
+        new_belly_url = st.text_input("🎥 Đường dẫn Video bài học (YouTube/MP4):", value=current_belly_url, key="input_url_b")
+        st.markdown("---")
+        st.markdown("#### 📖 Văn bản hướng dẫn kỹ thuật")
+        new_b_txt_1 = st.text_area("Khung Thẻ Số 1 (Hiển thị khối trên):", value=b_txt_1, height=150)
+        new_b_txt_2 = st.text_area("Khung Thẻ Số 2 (Hiển thị khối dưới):", value=b_txt_2, height=150)
         
-        st.markdown("#### 📖 Văn bản chi tiết")
-        b_txt_1 = st.text_area("Khung số 1 (Nội dung khối trên):", placeholder="Nội dung phân đoạn 1...", height=120, key="b_txt1_in")
-        b_txt_2 = st.text_area("Khung số 2 (Nội dung khối dưới):", placeholder="Nội dung phân đoạn 2...", height=120, key="b_txt2_in")
-        
-        # Bọc thẻ HTML tự động theo thiết kế lõi
-        final_b_html = f'<div class="yoga-card">{b_txt_1}</div><div class="yoga-card">{b_txt_2}</div>'
+        final_belly_html = f'<div class="yoga-card">{new_b_txt_1}</div><div class="yoga-card">{new_b_txt_2}</div>'
         
         st.write("")
-        if st.button("🚀 XUẤT BẢN BÀI VIẾT BELLY DANCE", type="primary", use_container_width=True, key="b_btn_publish"):
-            if not b_title.strip():
-                st.error("❌ Thất bại: Vui lòng nhập tiêu đề bài viết!")
-            else:
-                success = db.insert_premium_post("morning_boost", b_title.strip(), b_url.strip(), final_b_html.strip())
-                if success:
-                    st.success("🎉 Đã xuất bản thành công bài viết mới vào chuyên mục Belly Dance!")
-                    st.rerun()
-                else:
-                    st.error("💥 Lỗi: Không thể nạp dữ liệu vào Database.")
-
-    st.write("---")
-    st.markdown("### 🗂️ DANH SÁCH BÀI CŨ ĐÃ LƯU (PHÂN TRANG GOOGLE STYLE)")
-    
-    # 2. Xử lý thuật toán phân trang 3 bài/trang kiểu Google cho bảng morning_boost
-    total_b_posts = db.get_total_posts_count("morning_boost")
-    posts_per_page = 3
-    
-    if total_b_posts == 0:
-        st.info("Hiện tại chuyên mục này chưa có bài viết nào lưu trong bảng `morning_boost`.")
-    else:
-        total_b_pages = math.ceil(total_b_posts / posts_per_page)
-        
-        if "pg_belly" not in st.session_state:
-            st.session_state["pg_belly"] = 1
-        current_b_page = st.session_state["pg_belly"]
-        offset_b = (current_b_page - 1) * posts_per_page
-        
-        # Gọi hàm truy vấn phân trang thông minh từ db.py
-        belly_posts_list = db.get_premium_posts_with_pagination("morning_boost", limit=posts_per_page, offset=offset_b)
-        
-        # Hiện danh sách log bài viết cho Admin xem
-        for bp in belly_posts_list:
-            with st.container(border=True):
-                st.markdown(f"#### **Bài mẫu: {bp['title']}** (Mã ID: `{bp['id']}`)")
-                st.caption(f"📅 Ngày đăng: `{bp['created_at']}` | 🔗 Link: {bp['video_url'] if bp['video_url'] else 'Không đính kèm Video'}")
-                with st.expander("👁️ Xem nhanh cấu trúc hiển thị của học viên"):
-                    if bp['video_url']: st.video(bp['video_url'])
-                    blocks = re.findall(r'<div class="yoga-card">\s*(.*?)\s*</div>', bp['content_html'], re.DOTALL)
-                    d1 = blocks[0] if len(blocks) >= 1 else "Trống phân đoạn 1"
-                    d2 = blocks[2] if len(blocks) >= 2 else "Trống phân đoạn 2"
-                    st.markdown(f'<div style="background-color:{theme_css["sheet_bg"]}; padding:15px; border-radius:8px; border-left:5px solid #1b8a5a; color:{theme_css["text_color"]}; margin-bottom:10px;">{d1}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div style="background-color:{theme_css["sheet_bg"]}; padding:15px; border-radius:8px; border-left:5px solid #1b8a5a; color:{theme_css["text_color"]};">{d2}</div>', unsafe_allow_html=True)
-
-        # Thanh lật số trang Google: 1 | 2 | 3...
-        st.write("Chuyển trang dữ liệu bài viết:")
-        cols_b_nav = st.columns(total_b_pages + 10)
-        for i in range(1, total_b_pages + 1):
-            btn_lbl = f"**[{i}]**" if i == current_b_page else f"{i}"
-            if cols_b_nav[i-1].button(btn_lbl, key=f"nav_b_{i}"):
-                st.session_state["pg_belly"] = i
-                st.rerun()
+        if st.button(lang["save_content_btn"], type="primary", use_container_width=True, key="btn_save_b"):
+            db.update_yoga_data(2, new_belly_url, final_belly_html)
+            st.success(lang["msg_update_success"])
 
 # =====================================================================
-# 🧘 TAB 3: BIÊN TẬP KHÓA HỌC / TIN TỨC PRIVATE YOGA (BẢNG: deep_sleep)
+# 🧘 TAB 3: BIÊN TẬP NỘI DUNG PRIVATE YOGA (ID = 1)
 # =====================================================================
 with tab_manage_yoga:
     st.write("")
-    st.markdown("### 📝 ĐĂNG BÀI VIẾT PRIVATE YOGA MỚI (CHUYÊN MỤC: DEEP SLEEP)")
+    st.markdown("### 📝 BIÊN TẬP KHÓA HỌC PRIVATE YOGA PREMIUM")
     
-    # 1. Form nhập bài viết lưu lịch sử vào bảng deep_sleep
+    yoga_data = db.get_yoga_data_by_id(1)
+    current_yoga_url = yoga_data["video_url"] if yoga_data else "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    current_yoga_html = yoga_data["content_html"] if yoga_data else '<div class="yoga-card">Đoạn 1 trống</div><div class="yoga-card">Đoạn 2 trống</div>'
+    
+    blocks_y = re.findall(r'<div class="yoga-card">\s*(.*?)\s*</div>', current_yoga_html, re.DOTALL)
+    y_txt_1 = blocks_y[0] if len(blocks_y) >= 1 else "Nhập nội dung phân đoạn 1..."
+    y_txt_2 = blocks_y[1] if len(blocks_y) >= 2 else "Nhập nội dung phân đoạn 2..."
+    
+    # Form điền dữ liệu đồng bộ
     with st.container(border=True):
-        y_title = st.text_input("🏷️ Tiêu đề bài giảng / tin tức:", placeholder="Nhập tiêu đề bài viết Yoga...", key="y_title_in")
-        y_url = st.text_input("🎥 Đường dẫn Video bài học (YouTube URL):", placeholder="https://www.youtube.com/watch?v=...", key="y_url_in")
+        new_yoga_url = st.text_input("🎥 Đường dẫn Video bài học (YouTube/MP4):", value=current_yoga_url, key="input_url_y")
+        st.markdown("---")
+        st.markdown("#### 📖 Văn bản hướng dẫn kỹ thuật")
+        new_y_txt_1 = st.text_area("Khung Thẻ Số 1 (Hiển thị khối trên):", value=y_txt_1, height=150)
+        new_y_txt_2 = st.text_area("Khung Thẻ Số 2 (Hiển thị khối dưới):", value=y_txt_2, height=150)
         
-        st.markdown("#### 📖 Văn bản chi tiết")
-        y_txt_1 = st.text_area("Khung số 1 (Nội dung khối trên):", placeholder="Nội dung phân đoạn 1...", height=120, key="y_txt1_in")
-        y_txt_2 = st.text_area("Khung số 2 (Nội dung khối dưới):", placeholder="Nội dung phân đoạn 2...", height=120, key="y_txt2_in")
-        
-        # Bọc thẻ HTML tự động theo thiết kế lõi
-        final_y_html = f'<div class="yoga-card">{y_txt_1}</div><div class="yoga-card">{y_txt_2}</div>'
+        final_yoga_html = f'<div class="yoga-card">{new_y_txt_1}</div><div class="yoga-card">{new_y_txt_2}</div>'
         
         st.write("")
-        if st.button("🚀 XUẤT BẢN BÀI VIẾT PRIVATE YOGA", type="primary", use_container_width=True, key="y_btn_publish"):
-            if not y_title.strip():
-                st.error("❌ Thất bại: Vui lòng nhập tiêu đề bài viết!")
-            else:
-                success = db.insert_premium_post("deep_sleep", y_title.strip(), y_url.strip(), final_y_html.strip())
-                if success:
-                    st.success("🎉 Đã xuất bản thành công bài viết mới vào chuyên mục Private Yoga!")
-                    st.rerun()
-                else:
-                    st.error("💥 Lỗi: Không thể nạp dữ liệu vào Database.")
-
-    st.write("---")
-    st.markdown("### 🗂️ DANH SÁCH BÀI CŨ ĐÃ LƯU (PHÂN TRANG GOOGLE STYLE)")
-    
-    # 2. Xử lý thuật toán phân trang 3 bài/trang kiểu Google cho bảng deep_sleep
-    total_y_posts = db.get_total_posts_count("deep_sleep")
-    
-    if total_y_posts == 0:
-        st.info("Hiện tại chuyên mục này chưa có bài viết nào lưu trong bảng `deep_sleep`.")
-    else:
-        total_y_pages = math.ceil(total_y_posts / posts_per_page)
-        
-        if "pg_yoga" not in st.session_state:
-            st.session_state["pg_yoga"] = 1
-        current_y_page = st.session_state["pg_yoga"]
-        offset_y = (current_y_page - 1) * posts_per_page
-        
-        # Gọi hàm truy vấn phân trang thông minh từ db.py
-        yoga_posts_list = db.get_premium_posts_with_pagination("deep_sleep", limit=posts_per_page, offset=offset_y)
-        
-        # Hiện danh sách log bài viết cho Admin xem
-        for yp in yoga_posts_list:
-            with st.container(border=True):
-                st.markdown(f"#### **Bài mẫu: {yp['title']}** (Mã ID: `{yp['id']}`)")
-                st.caption(f"📅 Ngày đăng: `{yp['created_at']}` | 🔗 Link: {yp['video_url'] if yp['video_url'] else 'Không đính kèm Video'}")
-                with st.expander("👁️ Xem nhanh cấu trúc hiển thị của học viên"):
-                    if yp['video_url']: st.video(yp['video_url'])
-                    blocks = re.findall(r'<div class="yoga-card">\s*(.*?)\s*</div>', yp['content_html'], re.DOTALL)
-                    d1 = blocks[0] if len(blocks) >= 1 else "Trống phân đoạn 1"
-                    d2 = blocks[1] if len(blocks) >= 2 else "Trống phân đoạn 2"
-                    st.markdown(f'<div style="background-color:{theme_css["sheet_bg"]}; padding:15px; border-radius:8px; border-left:5px solid #1b8a5a; color:{theme_css["text_color"]}; margin-bottom:10px;">{d1}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div style="background-color:{theme_css["sheet_bg"]}; padding:15px; border-radius:8px; border-left:5px solid #1b8a5a; color:{theme_css["text_color"]};">{d2}</div>', unsafe_allow_html=True)
-
-        # Thanh lật số trang Google: 1 | 2 | 3...
-        st.write("Chuyển trang dữ liệu bài viết:")
-        cols_y_nav = st.columns(total_y_pages + 10)
-        for i in range(1, total_y_pages + 1):
-            btn_lbl = f"**[{i}]**" if i == current_y_page else f"{i}"
-            if cols_y_nav[i-1].button(btn_lbl, key=f"nav_y_{i}"):
-                st.session_state["pg_yoga"] = i
-                st.rerun()
+        if st.button(lang["save_content_btn"], type="primary", use_container_width=True, key="btn_save_y"):
+            db.update_yoga_data(1, new_yoga_url, final_yoga_html)
+            st.success(lang["msg_update_success"])
