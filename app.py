@@ -1081,7 +1081,7 @@ with tab1:
 
     # 🔄 1. Render Iframe Editor cố định lên màn hình
     with st.container(key=st.session_state["iframe_key"]): 
-        st.components.v1.html(html_src, height=444, scrolling=True)
+        st.components.v1.html(html_src, height=555, scrolling=True)
 
     # 💾 2. NÚT BẤM LƯU DỮ LIỆU (ĐÃ ĐỔI SANG MÀU XANH DƯƠNG CHUYÊN NGHIỆP)
     st.write("")
