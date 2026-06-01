@@ -776,7 +776,7 @@ with tab1:
     
 
        
-    # =====================================================================
+   # =====================================================================
     # ĐOẠN SỬA LỖI: NHÚNG MÃ NGUỒN HTML IFRAME EDITOR & THANH HÀNH ĐỘNG ĐỒNG BỘ
     # =====================================================================
     html_src = f"""
@@ -820,7 +820,7 @@ with tab1:
                         word-wrap: break-word;
                         white-space: pre-wrap;
                     }}
-                    /* Class chuẩn: Chỉ tô đậm TRÊN/DƯỚI, ẩn hoàn toàn TRÁI/PHẢI */
+                    /* 🔥 Đã gộp và sửa lỗi Class bold-border: Chỉ tô đậm TRÊN/DƯỚI, ẩn hoàn toàn TRÁI/PHẢI */
                     .bold-border {{
                         border-top: 3px solid #000 !important;
                         border-bottom: 3px solid #000 !important;
@@ -830,11 +830,6 @@ with tab1:
                     /* Chỉ tô đen hoàn toàn cho dòng nốt nhạc DO RE MI... */ 
                     .black-note-bar {{ background:#000!important; color:#fff!important; cursor:not-allowed!important; font-size:14px; }}
                     
-                    /* Class chỉ tô đậm 2 cạnh TRÊN và DƯỚI của ô */
-                    .bold-border {{
-                        border-top: 3px solid #000 !important;
-                        border-bottom: 3px solid #000 !important;
-                    }}
                     /* Các ô tiêu đề bị khóa: Giữ màu trắng tinh, đổi con trỏ thành dấu cấm */
                     .locked-title {{ background:#ffffff!important; color:#000!important; cursor:not-allowed!important; }}
                     
@@ -857,6 +852,7 @@ with tab1:
                         height: 25px;
                         text-align: center;
                         cursor: default;
+                        padding: 15px 0 !important;
                     }}
                     /* Bảng thông tin văn bản bên dưới */ 
                     .info-table td {{
@@ -879,10 +875,6 @@ with tab1:
                         cursor:pointer; 
                         margin-bottom:10px; 
                     }}
-                    .foundation-bar {{
-                        padding: 15px 0 !important;
-                    }}
-                    
                 </style>
                 
                 <script>
@@ -893,22 +885,16 @@ with tab1:
                         "cell_17", "cell_18", "cell_19", "cell_20", "cell_21", "cell_22", "cell_23"
                     ];
 
-                    // 2. CHỨC NĂNG CŨ: Điền ID vào đây nếu bạn muốn chủ động khóa thêm ô nào trong 23 ô trên
                     let lockedCells = []; 
                     
-                    // Tự động kiểm tra quyền sửa và thiết lập giao diện khi tải trang
                     window.addEventListener("DOMContentLoaded", () => {{
                         document.querySelectorAll("td[id]").forEach(cell => {{
                             let cellId = cell.id;
-                            
-                            // Nếu KHÔNG thuộc 23 ô tương tác, HOẶC nằm trong danh sách chủ động khóa thêm (lockedCells)
                             if (!ALLOWED_EDIT_CELLS.includes(cellId) || lockedCells.includes(cellId)) {{
                                 cell.removeAttribute("onclick");
-                                
-                                // Nếu không thuộc nhóm thanh nốt nhạc màu đen thì chuyển thành class khóa trắng tinh
                                 if (!cell.className.includes("black-note-bar")) {{
                                     cell.className = "locked-title";
-                                }}
+                                }}}
                             }}
                         }});
                     }});
@@ -921,20 +907,14 @@ with tab1:
                             }}
                         }});
 
-                        // Mã hóa dữ liệu JSON an toàn cho URL
                         let jsonStr = encodeURIComponent(JSON.stringify(data));
-
-                        // Lấy domain và path hiện tại của trang cha một cách động
                         let currentOrigin = window.parent.location.origin;
                         let currentPath = window.parent.location.pathname;
 
-                        // Ép trang cha chuyển hướng sang URL mới có chứa dữ liệu bảng nhạc
-                        // Cách này vượt qua mọi rào cản bảo mật Iframe của Streamlit Cloud
+                        // Đồng bộ chuẩn lên URL trang cha để Streamlit Python đọc được qua st.query_params
                         window.parent.location.href = currentOrigin + currentPath + "?grid_data=" + jsonStr;
                     }}
 
-                    // 🔥 THÊM HÀM NÀY: Xử lý biến dấu | thành dấu xuống hàng thực tế \n
-                    // Cấu hình mới: Nhận diện cụm ".." để bẻ dòng xuống hàng \n
                     function formatText(text) {{
                         if(!text) return "";
                         return text.split('..').map(item => item.trim()).join('\\n');
@@ -942,11 +922,7 @@ with tab1:
 
                     function cellAction(e, d) {{
                         if(confirm("{lang['cell_edit_confirm']}")) {{
-                            
-                            // Khi khách nhấn sửa lại, tự động chuyển các dòng đang xuống hàng thành dấu ..
                             let currentText = e.innerText.replace(/\\n/g, " .. ");
-                            
-                            // Câu thông báo hướng dẫn siêu ngắn gọn, dễ hiểu cho cả người già lẫn trẻ nhỏ
                             let v = prompt("{lang['cell_prompt_title']}", currentText || d);
                             if(v!==null){{ 
                                 e.innerText = formatText(v); 
@@ -971,22 +947,21 @@ with tab1:
                         <table>
                             <tr>
                                 <td class="treble bold-border" rowspan="1"></td>
-                                <td id="bot_bracket_open" class="black-note-bar">{get_val('bot_bracket_open', '[')}</td>
-                                <td id="bot_do" class="black-note-bar">{get_val('bot_do', 'DO')}</td>
-                                <td id="bot_re" class="black-note-bar">{get_val('bot_re', 'RE')}</td>
-                                <td id="bot_mi" class="black-note-bar">{get_val('bot_mi', 'MI')}</td>
-                                <td id="bot_fa" class="black-note-bar">{get_val('bot_fa', 'FA')}</td>
-                                <td id="bot_sol" class="black-note-bar">{get_val('bot_sol', 'SOL')}</td>
-                                <td id="bot_la" class="black-note-bar">{get_val('bot_la', 'LA')}</td>
-                                <td id="bot_si" class="black-note-bar">{get_val('bot_si', 'SI')}</td>
-                                <td id="bot_je" class="black-note-bar">{get_val('bot_je', 'JE')}</td>
-                                <td id="bot_bracket_close" class="black-note-bar">{get_val('bot_bracket_close', '] n')}</td>
+                                <td id="top_bracket_open" class="black-note-bar">{get_val('top_bracket_open', '[')}</td>
+                                <td id="top_do" class="black-note-bar">{get_val('top_do', 'DO')}</td>
+                                <td id="top_re" class="black-note-bar">{get_val('top_re', 'RE')}</td>
+                                <td id="top_mi" class="black-note-bar">{get_val('top_mi', 'MI')}</td>
+                                <td id="top_fa" class="black-note-bar">{get_val('top_fa', 'FA')}</td>
+                                <td id="top_sol" class="black-note-bar">{get_val('top_sol', 'SOL')}</td>
+                                <td id="top_la" class="black-note-bar">{get_val('top_la', 'LA')}</td>
+                                <td id="top_si" class="black-note-bar">{get_val('top_si', 'SI')}</td>
+                                <td id="top_je" class="black-note-bar">{get_val('top_je', 'JE')}</td>
+                                <td id="top_bracket_close" class="black-note-bar">{get_val('top_bracket_close', '] n')}</td>
                                 <td class="treble bold-border" rowspan="1"></td> 
                             </tr>
                              
                             <tr>
                                 <td class="treble bold-border" rowspan="5">𝄞</td>
-                                
                                 <td id="label_ht100_left" class="gray" style="font-weight:bold;" rowspan="4">{lang['lbl_ht100_side']}</td>
                                 <td id="BƯỚC_1" colspan="3" class="gray">{lang['step_1']}</td>
                                 <td id="BƯỚC_2" colspan="2" class="gray">{lang['step_2']}</td>
@@ -994,7 +969,6 @@ with tab1:
                                 <td id="BƯỚC_4" class="gray">{lang['step_4']}</td>
                                 <td id="BƯỚC_5" class="gray">{lang['step_5']}</td>
                                 <td id="label_ht100_right" class="gray" style="font-weight:bold;" rowspan="4">{lang['lbl_ht100_side']}</td>
-                                
                             </tr>
                              
                             <tr>
@@ -1028,7 +1002,6 @@ with tab1:
                             </tr>
                              
                             <tr>
-                                
                                 <td id="label_a200_left" class="gray" style="font-weight:bold;">{lang['lbl_a200_side']}</td>
                                 <td id="cell_4" class="purple {get_class('cell_4')}" onclick="cellAction(this, '4')">{get_val('cell_4', 'Đôi ')}</td>
                                 <td id="cell_5" class="gray {get_class('cell_5')}" onclick="cellAction(this, '5')">{get_val('cell_5', '')}</td>
@@ -1039,7 +1012,6 @@ with tab1:
                                 <td id="cell_14" class="gray {get_class('cell_14')}" onclick="cellAction(this, '14')">{get_val('cell_14', '')}</td>
                                 <td id="cell_16" class="purple {get_class('cell_16')}" onclick="cellAction(this, '16')">{get_val('cell_16', '8! </br>Sự  ')}</td>
                                 <td id="label_a200_right" class="gray" style="font-weight:bold;">{lang['lbl_a200_side']}</td>
-                                
                             </tr>
                              
                             <tr>
@@ -1088,7 +1060,6 @@ with tab1:
                                 <td id="cell_21" rowspan="2" onclick="cellAction(this, '21')">{get_val('cell_21', '')}</td>
                                 <td class="info-purple" style="text-align:center;" rowspan="2">{lang['summary_lbl']}</td>
                                 <td id="cell_23" rowspan="2" onclick="cellAction(this, '23')">{get_val('cell_23', '')}</td>
-                                
                             </tr>
                             <tr>
                                 <td class="info-label">{lang['myn_lbl']}</td>
@@ -1101,21 +1072,17 @@ with tab1:
             </html>
 """
 
-
-    
-
-    
-
-    
-
     # 🔄 1. Render Iframe Editor lên màn hình
     with st.container(key=st.session_state["iframe_key"]): 
-        transfer_json = st.components.v1.html(html_src, height=700, scrolling=True)
+        st.components.v1.html(html_src, height=700, scrolling=True)
         
-        # 🔥 ĐOẠN ĐÃ ĐƯỢC SỬA: Bộ lọc dữ liệu thông minh chặn đứng chuỗi rỗng
-        if transfer_json and str(transfer_json).strip() != "{}" and "cell_" in str(transfer_json):
-            st.session_state.iframe_data_store = transfer_json
-            st.session_state["current_sheet_json"] = transfer_json
+        # 🔥 ĐOẠN ĐÃ ĐƯỢC SỬA: Lấy dữ liệu trực tiếp từ URL của trang cha thông qua st.query_params
+        # Do Iframe đồng bộ dữ liệu trực tiếp lên URL, Streamlit sẽ bắt giá trị qua param 'grid_data'
+        url_data = st.query_params.get("grid_data", None)
+        
+        if url_data and str(url_data).strip() != "{}" and "cell_" in str(url_data):
+            st.session_state.iframe_data_store = url_data
+            st.session_state["current_sheet_json"] = url_data
 
     st.markdown("---")
         
@@ -1133,7 +1100,6 @@ with tab1:
     # 🔒 3. Đóng kết nối DB an toàn khi kết thúc Tab 1
     try: conn_g.close()
     except: pass
-
 
 # ---------------------------------------------------------------------
 # 💃 NỘI DUNG TAB 2: BELLY DANCE (CẬP NHẬT THEO YÊU CẦU)
