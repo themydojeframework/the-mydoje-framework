@@ -2,6 +2,7 @@ altair==6.1.0
 anyio==4.13.0
 attrs==26.1.0
 blinker==1.9.0
+psycopg2-binary
 cachetools==7.1.4
 certifi==2026.5.20
 cffi==2.0.0

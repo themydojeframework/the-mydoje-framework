@@ -78,44 +78,23 @@ def init_authenticator():
         except Exception:
             return None
 
-import os
-import psycopg2
-from psycopg2.extras import DictCursor
-
 authenticator = init_authenticator()
 db.init_db()
 
-# --- KẾT NỐI POSTGRESQL SUPABASE PROD ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-cursor = conn.cursor(cursor_factory=DictCursor)
-
-# 1. Tạo bảng yoga_data kiểu Postgres (Dùng SERIAL cho id)
+conn = sqlite3.connect("app.db", check_same_thread=False)
+cursor = conn.cursor()
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS yoga_data (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY,
         video_url TEXT,
         content_html TEXT
-    );
+    )
 """)
-conn.commit()
-
-# 2. Kiểm tra xem bảng có dữ liệu chưa
-cursor.execute("SELECT COUNT(*) FROM yoga_data;")
+cursor.execute("SELECT COUNT(*) FROM yoga_data")
 if cursor.fetchone()[0] == 0:
-    # Để Postgres tự quản lý ID, ta KHÔNG chèn cột 'id' vào đây, nó sẽ tự nhảy 1, 2 nhé bạn
-    cursor.execute(
-        "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-        ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
-    )
-    cursor.execute(
-        "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-        ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
-    )
+    cursor.execute("INSERT INTO yoga_data (id, video_url, content_html) VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '<div class=\"yoga-card\">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class=\"yoga-card\">Động tác kéo giãn cơ đoạn 2</div>')")
+    cursor.execute("INSERT INTO yoga_data (id, video_url, content_html) VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '<div class=\"yoga-card\">Belly Dance Đánh hông cơ bản đoạn 1</div><div class=\"yoga-card\">Sóng bụng dẻo dai đoạn 2</div>')")
     conn.commit()
-
-# Đóng cursor và connection sau khi hoàn thành khởi tạo
-cursor.close()
 conn.close()
 
 def check_or_create_user_local(email):
