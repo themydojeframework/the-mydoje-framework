@@ -1322,6 +1322,39 @@ with tab1:
         * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để ghi nhận.')}
         """)
 
+
+# =====================================================================
+# 🤠 KHU VỰC ADMIN: ĐẶT NGAY TẠI ĐÂY (NẰM TRƯỚC CÁC TAB)
+# =====================================================================
+if st.session_state.get("user_role") == "ADMIN":
+    st.title("🤠 TRANG QUẢN TRỊ ADMIN - ĐĂNG BÀI PREMIUM")
+    target_tab = st.selectbox("Chọn chuyên mục muốn đăng bài:", ["Morning Boost", "Deep Sleep"])
+    table_mapping = {"Morning Boost": "morning_boost", "Deep Sleep": "deep_sleep"}
+    
+    post_title = st.text_input("Tiêu đề bài học/bài viết:")
+    post_video = st.text_input("Đường dẫn Video (YouTube URL):")
+    post_html = st.text_area("Nội dung HTML (Bọc các đoạn bằng <div class='yoga-card'>...</div>):", height=200, key="admin_html_area")
+
+    if st.button("🚀 XUẤT BẢN BÀI VIẾT", key="admin_publish_btn"):
+        if post_title.strip() == "":
+            st.error("Vui lòng nhập tiêu đề bài viết!")
+        else:
+            success = db.insert_premium_post(
+                table_name=table_mapping[target_tab],
+                title=post_title,
+                video_url=post_video,
+                content_html=post_html
+            )
+            if success:
+                st.success(f"🎉 Đã thêm thành công bài viết mới vào chuyên mục {target_tab}!")
+                st.rerun()
+            else:
+                st.error("Có lỗi xảy ra khi lưu vào Database.")
+    st.write("---")
+    
+    
+
+
 # ---------------------------------------------------------------------
 # 💃 NỘI DUNG TAB 2: BELLY DANCE (CẬP NHẬT THEO YÊU CẦU)
 # ---------------------------------------------------------------------
@@ -1349,12 +1382,8 @@ with tab_belly:
         st.success(lang["premium_welcome_belly"])
         st.write("---")
         
-        conn_b = sqlite3.connect("app.db", check_same_thread=False)
-        conn_b.row_factory = sqlite3.Row
-        cursor_b = conn_b.cursor()
-        cursor_b.execute("SELECT video_url, content_html FROM yoga_data WHERE id = 2")
-        row = cursor_b.fetchone()
-        conn_b.close()
+        # 👑 ĐÃ FIX: Gọi hàm rẽ nhánh thông minh thay vì ép cứng sqlite3
+        row = db.get_yoga_data_by_id(2)
         
         if row:
             video_url, content_html = row["video_url"], row["content_html"]
@@ -1411,12 +1440,8 @@ with tab_yoga:
         st.success(lang["premium_welcome_yoga"])
         st.write("---")
         
-        conn_y = sqlite3.connect("app.db", check_same_thread=False)
-        conn_y.row_factory = sqlite3.Row
-        cursor_y = conn_y.cursor()
-        cursor_y.execute("SELECT video_url, content_html FROM yoga_data WHERE id = 1")
-        row_y = cursor_y.fetchone()
-        conn_y.close()
+        # 👑 ĐÃ FIX: Gọi hàm rẽ nhánh thông minh lấy ID = 1 cho Yoga
+        row_y = db.get_yoga_data_by_id(1)
         
         if row_y:
             video_url, content_html = row_y["video_url"], row_y["content_html"]

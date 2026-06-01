@@ -43,12 +43,13 @@ def get_connection():
 
 
 def init_db():
-    """Khởi tạo toàn bộ hệ thống bảng và tự động cập nhật cột thiếu cho cả 2 môi trường."""
+    """Khởi tạo toàn bộ hệ thống bảng mới (Tách biệt morning_boost và deep_sleep) 
+    và xóa bỏ hoàn toàn bảng cũ yoga_data."""
     conn = get_connection()
     
     if "sqlite" in DATABASE_URL:
         cursor = conn.cursor()
-        # --- CẤU HÌNH BẢNG CHO SQLITE (DƯỚI MÁY) ---
+        # --- CẤU HÌNH BẢNG CHO SQLITE (DƯỚI MÁY LOCAL) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,40 +68,45 @@ def init_db():
                 user_email TEXT
             )
         """)
+        
+        # 🆕 Tạo 2 bảng mới phục vụ trang khóa học/tin tức có lưu lịch sử
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS yoga_data (
-                id INTEGER PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS morning_boost (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
                 video_url TEXT,
-                content_html TEXT
+                content_html TEXT,
+                created_at TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS deep_sleep (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                video_url TEXT,
+                content_html TEXT,
+                created_at TEXT
             )
         """)
         
-        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG (MIGRATION)
+        # 🗑️ Xóa sổ hoàn toàn bảng yoga_data cũ (nếu có) để tránh xung đột
+        try:
+            cursor.execute("DROP TABLE IF EXISTS yoga_data;")
+        except sqlite3.OperationalError:
+            pass
+            
+        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG (MIGRATION) CỘT USER_EMAIL
         try:
             cursor.execute("ALTER TABLE records ADD COLUMN user_email TEXT DEFAULT '';")
             conn.commit()
         except sqlite3.OperationalError:
             pass
 
-        # Chèn dữ liệu mẫu cho SQLite
-        cursor.execute("SELECT COUNT(*) FROM yoga_data")
-        if cursor.fetchone()[0] == 0:
-            cursor.execute("""
-                INSERT INTO yoga_data (id, video_url, content_html) 
-                VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
-            """)
-            cursor.execute("""
-                INSERT INTO yoga_data (id, video_url, content_html) 
-                VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
-            """)
-            conn.commit()
         cursor.close()
         conn.close()
         
     else:
-        # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE) ---
+        # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE CLOUD) ---
         conn.autocommit = True
         cursor = conn.cursor()
         
@@ -123,34 +129,35 @@ def init_db():
                     user_email TEXT
                 );
             """)
+            
+            # 🆕 Tạo 2 bảng mới trên Supabase Cloud
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS yoga_data (
-                    id INT PRIMARY KEY,
+                CREATE TABLE IF NOT EXISTS morning_boost (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT,
                     video_url TEXT,
-                    content_html TEXT
+                    content_html TEXT,
+                    created_at TEXT
                 );
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS deep_sleep (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT,
+                    video_url TEXT,
+                    content_html TEXT,
+                    created_at TEXT
+                );
+            """)
+            
+            # 🗑️ Xóa bảng yoga_data cũ trên Supabase Cloud
+            cursor.execute("DROP TABLE IF EXISTS yoga_data;")
             
             # 🔥 BỘ SỬA LỖI TỰ ĐỘNG DÀNH CHO POSTGRES (SUPABASE)
             cursor.execute("ALTER TABLE records ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT '';")
             
-            # Chèn dữ liệu mẫu cho Supabase an toàn chống trùng ID
-            cursor.execute("SELECT COUNT(*) FROM yoga_data")
-            if cursor.fetchone()[0] == 0:
-                cursor.execute("""
-                    INSERT INTO yoga_data (id, video_url, content_html) 
-                    VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                    '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
-                    ON CONFLICT (id) DO NOTHING;
-                """)
-                cursor.execute("""
-                    INSERT INTO yoga_data (id, video_url, content_html) 
-                    VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                    '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
-                    ON CONFLICT (id) DO NOTHING;
-                """)
         except Exception as e:
-            st.error(f"💥 Lỗi thiết lập cấu hình bảng Supabase: {str(e)}")
+            st.error(f"💥 Lỗi thiết lập cấu hình bảng Supabase mới: {str(e)}")
         finally:
             cursor.close()
             conn.close()
@@ -358,36 +365,60 @@ def delete_record(record_id):
 # PHẦN 3: CÁC HÀM XỬ LÝ NỘI DUNG PREMIUM (TAB 2 & TAB 3)
 # ==========================================
 
-def get_yoga_data_by_id(content_id):
-    conn = get_connection()
-    if "sqlite" in DATABASE_URL:
-        cursor = conn.cursor()
-        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = ?", (content_id,))
-        row = cursor.fetchone()
-    else:
-        cursor = conn.cursor(cursor_factory=DictCursor)
-        cursor.execute("SELECT video_url, content_html FROM yoga_data WHERE id = %s", (content_id,))
-        row = cursor.fetchone()
-        
-    result = dict(row) if row else None
-    cursor.close()
-    conn.close()
-    return result
+# ==========================================
+# PHẦN 3: CÁC HÀM XỬ LÝ CHO BẢNG MỚI (CÓ PHÂN TRANG VÀ ĐẾM TỔNG)
+# ==========================================
 
-
-def update_yoga_data(content_id, video_url, content_html):
+def insert_premium_post(table_name, title, video_url, content_html):
+    """Admin thêm bài viết mới vào bảng chỉ định (morning_boost hoặc deep_sleep)"""
+    if table_name not in ["morning_boost", "deep_sleep"]:
+        return False
     conn = get_connection()
     cursor = conn.cursor()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     if "sqlite" in DATABASE_URL:
         cursor.execute(
-            "UPDATE yoga_data SET video_url = ?, content_html = ? WHERE id = ?",
-            (video_url, content_html, content_id)
+            f"INSERT INTO {table_name} (title, video_url, content_html, created_at) VALUES (?, ?, ?, ?)",
+            (title, video_url, content_html, now)
         )
     else:
         cursor.execute(
-            "UPDATE yoga_data SET video_url = %s, content_html = %s WHERE id = %s",
-            (video_url, content_html, content_id)
+            f"INSERT INTO {table_name} (title, video_url, content_html, created_at) VALUES (%s, %s, %s, %s)",
+            (title, video_url, content_html, now)
         )
     conn.commit()
     cursor.close()
     conn.close()
+    return True
+
+def get_premium_posts_with_pagination(table_name, limit=3, offset=0):
+    """Lấy danh sách bài viết theo trang (Mỗi trang tối đa `limit` bài, bỏ qua `offset` bài đầu)"""
+    if table_name not in ["morning_boost", "deep_sleep"]:
+        return []
+    conn = get_connection()
+    
+    if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset))
+        rows = [dict(row) for row in cursor.fetchall()]
+    else:
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor.execute(f"SELECT * FROM {table_name} ORDER BY id DESC LIMIT %s OFFSET %s", (limit, offset))
+        rows = [dict(row) for row in cursor.fetchall()]
+        
+    cursor.close()
+    conn.close()
+    return rows
+
+def get_total_posts_count(table_name):
+    """Đếm tổng số bài viết đang có trong bảng để tính toán số lượng trang Google (1, 2, 3...)"""
+    if table_name not in ["morning_boost", "deep_sleep"]:
+        return 0
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+    total = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    return total
