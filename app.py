@@ -1102,7 +1102,7 @@ with tab1:
         </style>
     """, unsafe_allowed_html=True)
 
-    # 💾 2. NÚT BẤM LƯU DỮ LIỆU 
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU ĐÃ CÓ SẴN BIẾN JSON
     st.write("")
     if st.button("💾 SAVE DATA", use_container_width=True):
         # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
@@ -1131,7 +1131,7 @@ with tab1:
                 json_file_1["current_lang"] = st.session_state.get("language", "vi")
                 json_file_2["current_lang"] = st.session_state.get("language", "vi")
 
-            # 🔥 ĐÂY LÀ 2 BIẾN JSON ĐỂ BẠN DÙNG CHO CÂU LỆNH SQL HOẶC FILE JSON
+            # 🔥 ĐÂY LÀ 2 BIẾN JSON ĐÃ SẴN SÀNG ĐỂ NẠP VÀO DATABASE
             json_str_1 = json.dumps(json_file_1, ensure_ascii=False)
             json_str_2 = json.dumps(json_file_2, ensure_ascii=False)
 
