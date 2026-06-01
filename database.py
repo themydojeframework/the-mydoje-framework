@@ -12,6 +12,11 @@ load_dotenv()
 # Lấy cấu hình URL kết nối thông minh
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 
+
+# Tự động nắn đầu ngữ về postgres:// nếu cấu hình trên Cloud đang để postgresql://
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgres://", 1)
+
 def get_connection():
     """Tự động kết nối tới đúng hệ quản trị cơ sở dữ liệu dựa theo môi trường."""
     if "sqlite" in DATABASE_URL:
