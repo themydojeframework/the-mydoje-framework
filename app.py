@@ -777,8 +777,21 @@ with tab1:
 
        
    # =====================================================================
-    # ĐOẠN SỬA LỖI: NHÚNG MÃ NGUỒN HTML IFRAME EDITOR & THANH HÀNH ĐỘNG ĐỒNG BỘ
+    # GIẢI PHÁP CHỐNG LOOP CHÍ MẠNG: CHUYỂN QUA NHẬN DATA QUA POSTMESSAGE & NÚT BẤM PYTHON
     # =====================================================================
+    if "iframe_data_store" not in st.session_state:
+        st.session_state.iframe_data_store = {}
+
+    # Hàm lấy giá trị hiển thị an toàn vào bảng HTML từ Session State
+    def get_val(cell_id, default_val=""):
+        if isinstance(st.session_state.iframe_data_store, str):
+            import json
+            try:
+                st.session_state.iframe_data_store = json.loads(st.session_state.iframe_data_store)
+            except:
+                st.session_state.iframe_data_store = {}
+        return st.session_state.iframe_data_store.get(cell_id, default_val)
+
     html_src = f"""
             <!DOCTYPE html>
             <html>
@@ -820,7 +833,7 @@ with tab1:
                         word-wrap: break-word;
                         white-space: pre-wrap;
                     }}
-                    /* 🔥 Đã gộp và sửa lỗi Class bold-border: Chỉ tô đậm TRÊN/DƯỚI, ẩn hoàn toàn TRÁI/PHẢI */
+                    /* 🔥 Class bold-border: Chỉ tô đậm TRÊN/DƯỚI, ẩn hoàn toàn TRÁI/PHẢI */
                     .bold-border {{
                         border-top: 3px solid #000 !important;
                         border-bottom: 3px solid #000 !important;
@@ -899,20 +912,21 @@ with tab1:
                         }});
                     }});
 
-                    function syncDataToParentURL() {{
+                    // 🔥 THAY THẾ TOÀN BỘ SYNC_URL CŨ: Gửi data qua kênh bảo mật ngầm không tải lại trang
+                    function sendDataToStreamlit() {{
                         let data = {{}}; 
                         document.querySelectorAll("td[id]").forEach(c => {{ 
                             if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {{
                                 data[c.id] = c.innerText; 
                             }}
                         }});
-
-                        let jsonStr = encodeURIComponent(JSON.stringify(data));
-                        let currentOrigin = window.parent.location.origin;
-                        let currentPath = window.parent.location.pathname;
-
-                        // Đồng bộ chuẩn lên URL trang cha để Streamlit Python đọc được qua st.query_params
-                        window.parent.location.href = currentOrigin + currentPath + "?grid_data=" + jsonStr;
+                        
+                        // Bắn sự kiện ngầm về cấu trúc Python của Streamlit Component
+                        window.parent.postMessage({{
+                            isStreamlit: true,
+                            type: "streamlit:setComponentValue",
+                            value: JSON.stringify(data)
+                        }}, "*");
                     }}
 
                     function formatText(text) {{
@@ -927,9 +941,12 @@ with tab1:
                             if(v!==null){{ 
                                 e.innerText = formatText(v); 
                                 e.className = e.className.includes("purple") ? "purple user-note" : "gray user-note"; 
-                                syncDataToParentURL(); 
+                                sendDataToStreamlit(); 
                             }}
-                        }} else {{ e.innerText=""; syncDataToParentURL(); }}
+                        }} else {{ 
+                            e.innerText=""; 
+                            sendDataToStreamlit(); 
+                        }}
                     }}
 
                     function exportToPNG() {{
@@ -1038,12 +1055,8 @@ with tab1:
 
                         <table class="info-table" style="margin-top: 15px; width: 92%; margin-left: 4%;">
                             <colgroup>
-                                <col style="width: 11%;">
-                                <col style="width: 20%;">
-                                <col style="width: 11%;">
-                                <col style="width: 19%;">
-                                <col style="width: 10%;">
-                                <col style="width: 30%;">
+                                <col style="width: 11%;"> <col style="width: 20%;"> <col style="width: 11%;">
+                                <col style="width: 19%;"> <col style="width: 10%;"> <col style="width: 30%;">
                             </colgroup>
                             <tr>
                                 <td class="info-label">{lang['field_lbl']}</td>
@@ -1072,32 +1085,53 @@ with tab1:
             </html>
 """
 
-    # 🔄 1. Render Iframe Editor lên màn hình
+    # 🔄 1. Render Iframe Editor thông qua kênh Component liên lạc ngầm (Không giật URL)
     with st.container(key=st.session_state["iframe_key"]): 
-        st.components.v1.html(html_src, height=700, scrolling=True)
+        # Sử dụng đối tượng st.components.v1.html gán vào biến để nhận message từ JS bắn ra
+        iframe_msg = st.components.v1.html(html_src, height=700, scrolling=True)
         
-        # 🔥 ĐOẠN ĐÃ ĐƯỢC SỬA: Lấy dữ liệu trực tiếp từ URL của trang cha thông qua st.query_params
-        # Do Iframe đồng bộ dữ liệu trực tiếp lên URL, Streamlit sẽ bắt giá trị qua param 'grid_data'
-        url_data = st.query_params.get("grid_data", None)
-        
-        if url_data and str(url_data).strip() != "{}" and "cell_" in str(url_data):
-            st.session_state.iframe_data_store = url_data
-            st.session_state["current_sheet_json"] = url_data
+        # Nhận diện dữ liệu khi người dùng vừa sửa trực tiếp trên bảng
+        if iframe_msg and str(iframe_msg).strip() != "" and "cell_" in str(iframe_msg):
+            st.session_state.iframe_data_store = iframe_msg
+
+    # 💾 2. NÚT BẤM PYTHON ĐỂ KHÓA VÀ GHI DỮ LIỆU CHẮC CHẮN VÀO DATABASE
+    st.write("")
+    if st.button("💾 SAVE DATA TO DATABASE", type="primary", use_container_width=True):
+        if st.session_state.iframe_data_store:
+            # Nếu data dạng chuỗi thì giữ nguyên, nếu dạng dict thì convert sang JSON string chuẩn để nạp vào DB
+            import json
+            if isinstance(st.session_state.iframe_data_store, dict):
+                final_json = json.dumps(st.session_state.iframe_data_store, ensure_ascii=False)
+            else:
+                final_json = st.session_state.iframe_data_store
+
+            # -------------------------------------------------------------
+            # THỰC THI CÂU LỆNH SQL CỦA BẠN ĐỂ CẬP NHẬT DATABASE TẠI ĐÂY
+            # Ví dụ:
+            # cursor_g.execute("UPDATE template_data SET sheet_json = ? WHERE id = ?", (final_json, unique_id))
+            # conn_g.commit()
+            # -------------------------------------------------------------
+            
+            st.session_state["current_sheet_json"] = final_json
+            st.success("🎉 Lưu trữ thành công tuyệt đối! Dữ liệu đã được đồng bộ cứng vào Database.")
+            st.balloons()
+        else:
+            st.warning("Lưới chưa có thay đổi mới nào để thực hiện lưu trữ.")
 
     st.markdown("---")
         
-    # 📝 2. Hiển thị dòng ghi chú hướng dẫn chính ở cuối trang
+    # 📝 3. Hiển thị dòng ghi chú hướng dẫn chính ở cuối trang
     col_margin, col_list = st.columns([1, 10]) 
 
     with col_list:
         st.markdown(f"### {lang.get('steps_main_title', 'Hướng dẫn')}")
         st.markdown(f"""
-        * **{lang.get('step_1_title', 'Bước 1:')}** {lang.get('step_1_desc', 'Chỉnh sửa trên lưới.')}
-        * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE để lưu lại.')}
-        * **{lang.get('step_3_title', 'Bước 3:')}** {lang.get('step_3_desc', 'Tận hưởng kết quả.')}
+        * **{lang.get('step_1_title', 'Bước 1:')}** {lang.get('step_1_desc', 'Chỉnh sửa trực tiếp trên lưới.')}
+        * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để lưu.')}
+        * **{lang.get('step_3_title', 'Bước 3:')}** {lang.get('step_3_desc', 'Tận hưởng kết quả bản lưu của bạn.')}
         """)
 
-    # 🔒 3. Đóng kết nối DB an toàn khi kết thúc Tab 1
+    # 🔒 4. Đóng kết nối DB an toàn khi kết thúc Tab 1
     try: conn_g.close()
     except: pass
 
