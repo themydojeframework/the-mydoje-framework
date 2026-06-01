@@ -75,7 +75,7 @@ if not st.session_state["admin_logged_in"]:
                     if not email_input or not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
                         st.error("Vui lòng nhập một địa chỉ Email hợp lệ!")
                     # CHỈ CHO PHÉP EMAIL QUẢN TRỊ TRONG DANH SÁCH ĐƯỢC NHẬN OTP
-                    elif email_input not in ["admin@mydoje.com", "themydoje@gmail.com"]:
+                    elif email_input not in ["admin@mydoje.com", "themydojeframework@gmail.com"]:
                         st.error("Hệ thống từ chối quyền truy cập! Email này không có trong danh sách đặc cách.")
                     else:
                         with st.spinner("Đang khởi tạo mã bảo mật và gửi hòm thư..."):

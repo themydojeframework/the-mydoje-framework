@@ -592,7 +592,7 @@ if current_email:
     current_email = current_email.strip().lower()
     
     # 2. Nếu phát hiện đúng email của bạn, tự động ép quyền thành ADMIN trong database
-    if current_email in ["admin@mydoje.com", "themydoje@gmail.com"]:
+    if current_email in ["admin@mydoje.com", "themydojeframework@gmail.com"]:
         # Kiểm tra xem quyền hiện tại trong session có phải ADMIN chưa, nếu chưa thì cập nhật DB
         if st.session_state.get("user_role") != "ADMIN":
             try:
