@@ -879,17 +879,25 @@ with tab1:
                         }});
                     }});
 
-                    function syncDataToParentURL() {{
-                        let data = {{}}; 
-                        document.querySelectorAll("td[id]").forEach(c => {{ 
-                            if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {{
+                    function syncDataToParentURL() {
+                        let data = {}; 
+                        document.querySelectorAll("td[id]").forEach(c => { 
+                            if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {
                                 data[c.id] = c.innerText; 
-                            }}
-                        }});
-                        let pUrl = new URL(window.parent.location.href); 
-                        pUrl.searchParams.set("grid_data", JSON.stringify(data));
-                        window.parent.history.replaceState({{}}, "", pUrl.toString());
-                    }}
+                            }
+                        });
+
+                        // Mã hóa dữ liệu JSON an toàn cho URL
+                        let jsonStr = encodeURIComponent(JSON.stringify(data));
+
+                        // Lấy domain và path hiện tại của trang cha một cách động
+                        let currentOrigin = window.parent.location.origin;
+                        let currentPath = window.parent.location.pathname;
+
+                        // Ép trang cha chuyển hướng sang URL mới có chứa dữ liệu bảng nhạc
+                        // Cách này vượt qua mọi rào cản bảo mật Iframe của Streamlit Cloud
+                        window.parent.location.href = currentOrigin + currentPath + "?grid_data=" + jsonStr;
+                    }
 
                     // 🔥 THÊM HÀM NÀY: Xử lý biến dấu | thành dấu xuống hàng thực tế \n
                     // Cấu hình mới: Nhận diện cụm ".." để bẻ dòng xuống hàng \n
