@@ -42,7 +42,7 @@ from email.mime.multipart import MIMEMultipart
 import streamlit as st
 
 # Giả định danh sách quản trị viên tối cao được phép truy cập hệ thống
-ADMIN_WHITELIST = ["admin@mydoje.com", "themydoje@gmail.com"]
+ADMIN_WHITELIST = ["admin@mydoje.com", "themydojeframework@gmail.com"]
 
 # =====================================================================
 # 🔐 2. HỆ THỐNG ĐĂNG NHẬP ADMIN ĐA PHƯƠNG THỨC (GOOGLE & EMAIL OTP)
