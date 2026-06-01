@@ -1083,40 +1083,55 @@ with tab1:
     with st.container(key=st.session_state["iframe_key"]): 
         st.components.v1.html(html_src, height=700, scrolling=True)
 
-    # 💾 2. NÚT BẤM PYTHON ĐỂ GHI THỰC SỰ VÀO DATABASE KHÔNG SỢ MẤT CHỮ
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU (ĐÃ ĐỔI SANG MÀU XANH DƯƠNG CHUYÊN NGHIỆP)
     st.write("")
-    if st.button("💾 SAVE DATA", type="primary", use_container_width=True):
+    
+    # Sử dụng type="secondary" để loại bỏ màu đỏ rực nguy hiểm, đổi thành màu xanh dương/trung tính lịch sự
+    if st.button("💾 SAVE DATA TO DATABASE", type="secondary", use_container_width=True):
         # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
         active_data = st.session_state.iframe_data_store
         
         if active_data and len(active_data) > 0:
-            final_json = json.dumps(active_data, ensure_ascii=False)
+            # Đảm bảo chuyển đổi chuỗi sang dict nếu cần thiết để bóc tách ô
+            if isinstance(active_data, str):
+                try: active_data = json.loads(active_data)
+                except: active_data = {}
 
-            # -------------------------------------------------------------
-            # THỰC THI CÂU LỆNH SQL CỦA BẠN TẠI ĐÂY
-            # Ví dụ:
-            # cursor_g.execute("UPDATE template_data SET sheet_json = ? WHERE id = ?", (final_json, unique_id))
-            # conn_g.commit()
-            # -------------------------------------------------------------
-            
-            # Chuyển thành chuỗi JSON dạng string (Đã xử lý gom ô ở bước trước)
+            # 🛠️ KHỞI TẠO BIẾN PHÒNG THỦ - TRÁNH LỖI NAMEERROR
+            json_file_1 = {}
+            json_file_2 = {}
+
+            if isinstance(active_data, dict):
+                # Khai báo danh sách các ô thuộc về từng nhóm JSON
+                grid_cells = [f"cell_{i}" for i in range(1, 17)]
+                info_cells = [f"cell_{i}" for i in range(17, 24)]
+
+                # Tách dữ liệu từ active_data vào đúng nhóm 2 file JSON
+                json_file_1 = {k: v for k, v in active_data.items() if k in grid_cells}
+                json_file_2 = {k: v for k, v in active_data.items() if k in info_cells}
+
+                # Gắn kèm ngôn ngữ hiện tại của session vào bên trong file JSON
+                json_file_1["current_lang"] = st.session_state.get("language", "vi")
+                json_file_2["current_lang"] = st.session_state.get("language", "vi")
+
+            # 🔥 ĐÂY LÀ 2 BIẾN JSON ĐỂ BẠN DÙNG CHO CÂU LỆNH SQL HOẶC FILE JSON
             json_str_1 = json.dumps(json_file_1, ensure_ascii=False)
             json_str_2 = json.dumps(json_file_2, ensure_ascii=False)
 
             # -------------------------------------------------------------
-            # THỰC THI SQL CỦA BẠN VỚI VỚI 2 BIẾN JSON
+            # TRỰC THI SQL CỦA BẠN VỚI VỚI KHỐI 2 BIẾN JSON NÀY:
             # cursor_g.execute("UPDATE template_data SET grid_json = ?, info_json = ? WHERE id = ?", (json_str_1, json_str_2, unique_id))
             # conn_g.commit()
             # -------------------------------------------------------------
 
-            # Cập nhật Session State (Lưu chuỗi tổng hoặc chuỗi riêng tùy bạn quản lý)
+            # Cập nhật Session State (Lưu chuỗi tổng để đồng bộ trạng thái ứng dụng)
             st.session_state["current_sheet_json"] = json.dumps(active_data, ensure_ascii=False)
             
             # Hiển thị thông báo động theo ngôn ngữ đã cấu hình trong file lang
-            st.success(f"🎉 {lang.get('save_success_lbl', 'Data updated successfully! ')}")
+            st.success(f"🎉 {lang.get('save_success_lbl', 'Cập nhật dữ liệu thành công!')}")
             st.balloons()
         else:
-            st.warning(f"{lang.get('no_data_changes_lbl', 'No new edited data found on the framework.')}")
+            st.warning(f"{lang.get('no_data_changes_lbl', 'Không tìm thấy dữ liệu chỉnh sửa mới trên lưới.')}")
 
     st.markdown("---")
         
