@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 import streamlit as st
+import json
 
 # Kích hoạt đọc file .env dưới máy local
 load_dotenv()
@@ -242,6 +243,10 @@ def insert_record(title, data_json):
     current_user = st.session_state.get('logged_in_user', '')
     
     if "sqlite" in DATABASE_URL:
+        # Nếu data_json lỡ là dict, SQLite vẫn nên nhận chuỗi json để đồng bộ
+        if isinstance(data_json, dict):
+            data_json = json.dumps(data_json, ensure_ascii=False)
+            
         cursor.execute(
             "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (?, ?, ?, ?, ?)",
             (title, data_json, now, now, current_user)
@@ -253,6 +258,10 @@ def insert_record(title, data_json):
         return new_id
     else:
         try:
+            # 🔥 SỬA LỖI CHÍ MẠNG: Nếu data_json đang là Dictionary, bắt buộc phải ép thành chuỗi TEXT JSON cho Postgres
+            if isinstance(data_json, dict):
+                data_json = json.dumps(data_json, ensure_ascii=False)
+                
             cursor.execute(
                 "INSERT INTO records (title, data_json, created_at, updated_at, user_email) VALUES (%s, %s, %s, %s, %s) RETURNING id;",
                 (title, data_json, now, now, current_user)
@@ -277,6 +286,9 @@ def update_record_data(record_id, data_json):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     if "sqlite" in DATABASE_URL:
+        if isinstance(data_json, dict):
+            data_json = json.dumps(data_json, ensure_ascii=False)
+            
         cursor.execute(
             "UPDATE records SET data_json = ?, updated_at = ? WHERE id = ?",
             (data_json, now, record_id)
@@ -286,6 +298,10 @@ def update_record_data(record_id, data_json):
         conn.close()
     else:
         try:
+            # 🔥 SỬA LỖI CHÍ MẠNG: Ép kiểu Dictionary thành chuỗi TEXT trước khi UPDATE lên Supabase
+            if isinstance(data_json, dict):
+                data_json = json.dumps(data_json, ensure_ascii=False)
+                
             cursor.execute(
                 "UPDATE records SET data_json = %s, updated_at = %s WHERE id = %s",
                 (data_json, now, record_id)
