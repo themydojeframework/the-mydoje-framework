@@ -583,14 +583,35 @@ if not st.session_state.authenticated:
     st.stop()
 
 # =====================================================================
-# ĐOẠN MÃ CHÈN VÀO SIDEBAR TRANG CHỦ (APP.PY) DÀNH CHO ADMIN
+# 🛠️ HỆ THỐNG TỰ ĐỘNG ĐẶC CÁCH QUYỀN ADMIN (CHÈN VÀO TRƯỚC SIDEBAR)
 # =====================================================================
-# Kiểm tra nếu người dùng hiện tại có quyền ADMIN trong session_state
+# 1. Lấy email hiện tại đang đăng nhập thành công ở trang chủ (tùy biến theo key trong session của bạn)
+current_email = st.session_state.get("user_email") or st.session_state.get("email")
+
+if current_email:
+    current_email = current_email.strip().lower()
+    
+    # 2. Nếu phát hiện đúng email của bạn, tự động ép quyền thành ADMIN trong database
+    if current_email in ["admin@mydoje.com", "themydoje@gmail.com"]:
+        # Kiểm tra xem quyền hiện tại trong session có phải ADMIN chưa, nếu chưa thì cập nhật DB
+        if st.session_state.get("user_role") != "ADMIN":
+            try:
+                db.update_user_role(current_email, "ADMIN")  # Cập nhật dưới Database
+                st.session_state["user_role"] = "ADMIN"      # Cập nhật vào Session hiện tại
+            except Exception as e:
+                # Nếu database chưa chạy hoặc lỗi hàm, ta ép cứng trực tiếp vào Session để chạy giao diện trước
+                st.session_state["user_role"] = "ADMIN"
+
+
+# =====================================================================
+# 🔐 ĐOẠN MÃ SIDEBAR HIỂN THỊ NÚT ADMIN PANEL (ĐÃ ĐƯỢC TỐI ƯU)
+# =====================================================================
+# Lúc này hệ thống chắc chắn đã nhận diện user_role là "ADMIN"
 if st.session_state.get("user_role") == "ADMIN":
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🛠️ KHU VỰC ĐIỀU HÀNH")
     
-    # Thay đường link ví dụ phía dưới bằng URL trang Admin thật mà Streamlit cấp cho bạn
+    # Đường link URL thật trên Cloud của bạn
     url_trang_admin = "https://mydoje-leader.streamlit.app"
     
     # Tạo nút bấm chuyển trang bằng HTML/CSS đồng bộ, đẹp mắt
@@ -613,7 +634,6 @@ if st.session_state.get("user_role") == "ADMIN":
     </a>
     """
     st.sidebar.markdown(admin_link_html, unsafe_allow_html=True)
-
 
 # =================================================================
 # 🏢 GIAO DIỆN CHÍNH TRÊN ĐẦU TRANG (TOP NAVBAR)

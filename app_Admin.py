@@ -2,6 +2,9 @@ import streamlit as st
 import database as db
 import re
 import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # =====================================================================
 # 🛠️ 1. CẤU HÌNH TRANG & ĐA NGÔN NGỮ KHỞI TẠO
@@ -61,7 +64,7 @@ if not st.session_state["admin_logged_in"]:
             if not st.session_state["admin_otp_sent"]:
                 email_input = st.text_input(
                     "Địa chỉ Email Quản trị viên:", 
-                    placeholder="themydoje@gmail.com...", 
+                    placeholder="nhập email admin...", 
                     key="admin_email_field"
                 ).strip().lower()
                 
@@ -72,7 +75,7 @@ if not st.session_state["admin_logged_in"]:
                     if not email_input or not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
                         st.error("Vui lòng nhập một địa chỉ Email hợp lệ!")
                     # CHỈ CHO PHÉP EMAIL QUẢN TRỊ TRONG DANH SÁCH ĐƯỢC NHẬN OTP
-                    elif email_input not in ["admin@mydoje.com", "themydojeframework@gmail.com"]:
+                    elif email_input not in ["admin@mydoje.com", "themydoje@gmail.com"]:
                         st.error("Hệ thống từ chối quyền truy cập! Email này không có trong danh sách đặc cách.")
                     else:
                         with st.spinner("Đang khởi tạo mã bảo mật và gửi hòm thư..."):
@@ -82,22 +85,27 @@ if not st.session_state["admin_logged_in"]:
                             # 2. GỬI MAIL THẬT: Gọi hàm gửi mail từ file database/app của bạn 
                             # (Thay db.send_otp_email bằng hàm gửi email thật đang chạy bên app.py của bạn)
                             try:
-                                # Giả định hàm gửi mail của bạn có cấu trúc: db.send_email(to, subject, body)
-                                subject = "🔑 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
+                                # Cấu hình Mail từ Secrets của App Admin trên Cloud
+                                msg = MIMEMultipart()
+                                msg['From'] = st.secrets["smtp"]["user"]
+                                msg['To'] = email_input
+                                msg['Subject'] = "🔑 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
+
                                 body = f"Mã OTP xác thực quyền điều hành tối cao của bạn là: {otp_generated}. Mã có hiệu lực trong 5 phút."
-                                
-                                # --- ĐOẠN LỆNH GỬI MAIL THỰC TẾ ---
-                                # db.send_otp_email(email_input, otp_generated) # Hoặc dùng hàm send_email tùy bạn cấu hình
-                                # ---------------------------------
-                                
-                                # Lưu trạng thái vào Session
+                                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+                                # Gọi cổng kết nối SMTP Gmail
+                                server = smtplib.SMTP(st.secrets["smtp"]["server"], st.secrets["smtp"]["port"])
+                                server.starttls()
+                                server.login(st.secrets["smtp"]["user"], st.secrets["smtp"]["password"])
+                                server.sendmail(st.secrets["smtp"]["user"], email_input, msg.as_string())
+                                server.quit()
+
+                                # Lưu trạng thái vào Session sau khi gửi THÀNH CÔNG
                                 st.session_state["admin_otp_code"] = otp_generated
                                 st.session_state["temp_admin_email"] = email_input
                                 st.session_state["admin_otp_sent"] = True
-                                
-                                # Hiện thông báo log/test tạm thời (Xóa dòng dưới khi chạy production nếu muốn ẩn hoàn toàn)
-                                st.info(f"Test nội bộ (Mã OTP là: {otp_generated})") 
-                                
+
                                 st.toast("📧 Mã OTP đã được gửi vào Email của bạn!")
                                 time.sleep(0.4)
                                 st.rerun()
