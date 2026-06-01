@@ -1236,10 +1236,9 @@ with tab1:
     with st.container(key=st.session_state["iframe_key"]): 
         st.components.v1.html(html_src, height=555, scrolling=True)
 
-    # 💾 2. NÚT BẤM LƯU DỮ LIỆU (ĐÃ ĐỔI SANG MÀU XANH DƯƠNG CHUYÊN NGHIỆP)
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU
     st.write("")
     
-    # Sử dụng type="secondary" để loại bỏ màu đỏ rực nguy hiểm, đổi thành màu xanh dương/trung tính lịch sự
     if st.button("💾 SAVE DATA TO DATABASE", type="secondary", use_container_width=True):
         # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
         active_data = st.session_state.iframe_data_store
@@ -1267,28 +1266,54 @@ with tab1:
                 json_file_1["current_lang"] = st.session_state.get("language", "vi")
                 json_file_2["current_lang"] = st.session_state.get("language", "vi")
 
-            # 🔥 ĐÂY LÀ 2 BIẾN JSON ĐỂ BẠN DÙNG CHO CÂU LỆNH SQL HOẶC FILE JSON
+            # 🔥 ĐÂY LÀ 2 BIẾN JSON CHUẨN ĐỂ ĐẨY LÊN DATABASE
             json_str_1 = json.dumps(json_file_1, ensure_ascii=False)
             json_str_2 = json.dumps(json_file_2, ensure_ascii=False)
 
-            # -------------------------------------------------------------
-            # TRỰC THI SQL CỦA BẠN VỚI VỚI KHỐI 2 BIẾN JSON NÀY:
-            # cursor_g.execute("UPDATE template_data SET grid_json = ?, info_json = ? WHERE id = ?", (json_str_1, json_str_2, unique_id))
-            # conn_g.commit()
-            # -------------------------------------------------------------
+            # =============================================================
+            # ĐÃ SỬA: KẾT NỐI VÀ ĐẨY DỮ LIỆU THỰC TẾ LÊN SUPABASE (POSTGRESQL)
+            # =============================================================
+            try:
+                # 1. Gọi hàm tạo kết nối động tới Supabase của bạn
+                conn_g = get_db_connection() 
+                cursor_g = conn_g.cursor()
+                
+                # 2. Định danh bản ghi (Lấy unique_id của bài học Yoga hiện tại)
+                # Nếu bạn lưu biến này tên khác (ví dụ: lesson_id, v.v.), hãy đổi tên lại nhé
+                current_id = unique_id if 'unique_id' in locals() else 1
+                
+                # 3. Thực thi SQL với cú pháp %s dành riêng cho Supabase
+                sql_query = """
+                    UPDATE template_data 
+                    SET grid_json = %s, info_json = %s 
+                    WHERE id = %s
+                """
+                cursor_g.execute(sql_query, (json_str_1, json_str_2, current_id))
+                
+                # 4. Commit xác nhận lưu vĩnh viễn lên Cloud Supabase
+                conn_g.commit()
+                
+                # 5. Đóng kết nối ngay sau khi dùng xong
+                cursor_g.close()
+                conn_g.close()
+                
+                # Cập nhật trạng thái Session State đồng bộ với bộ nhớ tạm của app
+                st.session_state["current_sheet_json"] = json.dumps(active_data, ensure_ascii=False)
+                
+                # Hiển thị thông báo thành công THẬT SỰ
+                st.success(f"🎉 {lang.get('save_success_lbl', 'Cập nhật dữ liệu thành công lên Supabase!')}")
+                st.balloons()
 
-            # Cập nhật Session State (Lưu chuỗi tổng để đồng bộ trạng thái ứng dụng)
-            st.session_state["current_sheet_json"] = json.dumps(active_data, ensure_ascii=False)
+            except Exception as db_err:
+                st.error(f"❌ Lỗi kết nối hoặc ghi dữ liệu lên Supabase: {db_err}")
+            # =============================================================
             
-            # Hiển thị thông báo động theo ngôn ngữ đã cấu hình trong file lang
-            st.success(f"🎉 {lang.get('save_success_lbl', 'Cập nhật dữ liệu thành công!')}")
-            st.balloons()
         else:
             st.warning(f"{lang.get('no_data_changes_lbl', 'Không tìm thấy dữ liệu chỉnh sửa mới trên lưới.')}")
 
     st.markdown("---")
         
-    # 📝 3. Hướng dẫn dòng cuối
+    # 📝 3. Hướng Hướng dẫn dòng cuối
     col_margin, col_list = st.columns([1, 10]) 
     with col_list:
         st.markdown(f"### {lang.get('steps_main_title', 'Hướng dẫn')}")
@@ -1296,9 +1321,6 @@ with tab1:
         * **{lang.get('step_1_title', 'Bước 1:')}** {lang.get('step_1_desc', 'Chỉnh sửa trực tiếp trên lưới.')}
         * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để ghi nhận.')}
         """)
-
-    try: conn_g.close()
-    except: pass
 
 # ---------------------------------------------------------------------
 # 💃 NỘI DUNG TAB 2: BELLY DANCE (CẬP NHẬT THEO YÊU CẦU)
