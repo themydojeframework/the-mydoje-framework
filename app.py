@@ -79,7 +79,7 @@ def init_authenticator():
             return None
 
 #----------------------------------
-#KẾT NỐI DATABASE TRÊN SUPASE VÀ APP.DB Ở LOCAL
+# KẾT NỐI DATABASE TRÊN SUPABASE VÀ APP.DB Ở LOCAL (ĐÃ FIX LỖI CHUYỂN ĐỔI MÔI TRƯỜNG)
 #----------------------------------
 import os
 import sqlite3
@@ -87,17 +87,27 @@ import psycopg2
 from psycopg2.extras import DictCursor
 from dotenv import load_dotenv  # Thêm thư viện để đọc file .env dưới máy
 
-# Kích hoạt đọc file .env (Dưới local sẽ đọc được DATABASE_URL=sqlite:///app.db)
+# 1. Kích hoạt đọc file .env (Chỉ có tác dụng khi chạy dưới máy Local)
 load_dotenv()
 
+# 2. 🔥 ĐOẠN ĐỌC BIẾN MÔI TRƯỜNG PHÂN THÂN CHUẨN CLOUD & LOCAL
+if "DATABASE_URL" in st.secrets:
+    # Nếu đang chạy trên Streamlit Cloud, ép hệ thống lấy URL Supabase từ ô Secrets
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+else:
+    # Nếu ở Local, kiểm tra file .env. Nếu không có file .env, mặc định dùng SQLite
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+
+# Đồng bộ ngược lại os.environ để file database.py bên ngoài cũng đọc chung một giá trị cấu hình này
+os.environ["DATABASE_URL"] = DATABASE_URL
+
+# 3. Khởi tạo Authenticator của bạn
 authenticator = init_authenticator()
+
+# 4. Gọi hàm khởi chạy Database từ file database.py để đồng bộ hóa các bảng hệ thống (users, records)
 db.init_db()
 
-# --- ĐOẠN ĐỌC BIẾN MÔI TRƯỜNG PHÂN THÂN ---
-# Nếu không tìm thấy DATABASE_URL trong hệ thống, mặc định sẽ dùng SQLite local
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
-
-# KIỂM TRA: Nếu trong link có chứa chữ "sqlite" -> Chạy máy Local (SQLite)
+# 5. KHỞI TẠO RIÊNG BẢNG YOGA_DATA TRONG APP.PY THEO TỪNG MÔI TRƯỜNG
 if "sqlite" in DATABASE_URL:
     # ----------------------------------------------------------------
     # CHẠY DƯỚI MÁY (LOCAL - SQLITE)
@@ -119,7 +129,6 @@ if "sqlite" in DATABASE_URL:
     # Kiểm tra và nạp dữ liệu mẫu cho SQLite nếu bảng trống
     cursor.execute("SELECT COUNT(*) FROM yoga_data;")
     if cursor.fetchone()[0] == 0:
-        # SQLite dùng dấu hỏi chấm (?) làm tham số truyền vào
         cursor.execute(
             "INSERT INTO yoga_data (video_url, content_html) VALUES (?, ?);",
             ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
@@ -136,34 +145,44 @@ else:
     # ----------------------------------------------------------------
     # CHẠY TRÊN MÂY (SUPABASE PROD - POSTGRESQL)
     # ----------------------------------------------------------------
-    conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-    cursor = conn.cursor(cursor_factory=DictCursor)
+    # Làm sạch khoảng trắng hoặc ký tự dấu nháy bao quanh chuỗi URL bọc trong Secrets
+    clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
     
-    # Tạo bảng kiểu Postgres (Dùng SERIAL)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS yoga_data (
-            id SERIAL PRIMARY KEY,
-            video_url TEXT,
-            content_html TEXT
-        );
-    """)
-    conn.commit()
-    
-    # Kiểm tra và nạp dữ liệu mẫu cho Postgres nếu bảng trống
-    cursor.execute("SELECT COUNT(*) FROM yoga_data;")
-    if cursor.fetchone()[0] == 0:
-        # Postgres dùng dấu phần trăm s (%s) làm tham số truyền vào
-        cursor.execute(
-            "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
-        )
-        cursor.execute(
-            "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
-            ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
-        )
-        conn.commit()
+    # Đồng bộ đầu ngữ link kết nối chuẩn định dạng cho thư viện psycopg2
+    if clean_url.startswith("postgresql://"):
+        clean_url = clean_url.replace("postgresql://", "postgres://", 1)
         
-    print("--- ĐÃ KẾT NỐI VÀO DATABASE SUPABASE PROD THÀNH CÔNG ---")
+    try:
+        conn = psycopg2.connect(clean_url, sslmode="require")
+        # 🔥 MẸO CHÍ MẠNG: Bật autocommit để tạo bảng trực tiếp trên cổng Pooler không bị chặn transaction
+        conn.autocommit = True
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        
+        # Tạo bảng kiểu Postgres (Dùng SERIAL)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS yoga_data (
+                id SERIAL PRIMARY KEY,
+                video_url TEXT,
+                content_html TEXT
+            );
+        """)
+        
+        # Kiểm tra và nạp dữ liệu mẫu cho Postgres nếu bảng trống
+        cursor.execute("SELECT COUNT(*) FROM yoga_data;")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
+                ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+            )
+            cursor.execute(
+                "INSERT INTO yoga_data (video_url, content_html) VALUES (%s, %s);",
+                ('https://youtu.be/1R6c6ABgDeE?si=5o8zf2awDTRHYDka', '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+            )
+            
+        print("--- ĐÃ KẾT NỐI VÀO DATABASE SUPABASE PROD THÀNH CÔNG ---")
+    except Exception as e:
+        st.error(f"💥 LỖI KẾT NỐI HOẶC TẠO BẢNG TRÊN SUPABASE: {str(e)}")
+        raise e
 
 # Đóng tài nguyên sau khi khởi tạo xong (Dùng chung cho cả 2 môi trường)
 cursor.close()

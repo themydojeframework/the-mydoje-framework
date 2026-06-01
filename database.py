@@ -32,13 +32,11 @@ def get_connection():
             clean_url = clean_url.replace("postgresql://", "postgres://", 1)
             
         try:
-            # 1. Kết nối qua cổng Pooler ổn định IPv4
+            # Kết nối qua cổng Pooler ổn định IPv4
             conn = psycopg2.connect(clean_url, sslmode="require")
             
-            # 2. 🔥 MẸO CHÍ MẠNG: Tắt prepare_threshold trực tiếp trên connection của psycopg2
-            # Cách này giúp vượt qua cơ chế chặn lệnh tạo bảng của Transaction/Session Pooler
-            conn.autocommit = True
-            
+            # 🚨 ĐÃ FIX: KHÔNG bật autocommit vĩnh viễn ở đây để tránh làm lỗi 
+            # các hàm INSERT/UPDATE/COMMIT ở các hàm nghiệp vụ bên dưới.
             return conn
         except Exception as e:
             import streamlit as st
@@ -48,9 +46,9 @@ def get_connection():
 def init_db():
     """Khởi tạo toàn bộ hệ thống bảng và tự động cập nhật cột thiếu cho cả 2 môi trường."""
     conn = get_connection()
-    cursor = conn.cursor()
     
     if "sqlite" in DATABASE_URL:
+        cursor = conn.cursor()
         # --- CẤU HÌNH BẢNG CHO SQLITE (DƯỚI MÁY) ---
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -83,7 +81,6 @@ def init_db():
             cursor.execute("ALTER TABLE records ADD COLUMN user_email TEXT DEFAULT '';")
             conn.commit()
         except sqlite3.OperationalError:
-            # Nếu cột đã tồn tại rồi, SQLite sẽ báo lỗi trùng lặp và ta bỏ qua một cách an toàn
             pass
 
         # Chèn dữ liệu mẫu cho SQLite
@@ -99,59 +96,66 @@ def init_db():
                 VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
                 '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
             """)
+            conn.commit()
+        cursor.close()
+        conn.close()
+        
     else:
         # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE MÂY) ---
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                email TEXT UNIQUE,
-                role TEXT DEFAULT 'FREE',
-                created_at TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS records (
-                id SERIAL PRIMARY KEY,
-                title TEXT,
-                data_json TEXT,
-                created_at TEXT,
-                updated_at TEXT,
-                user_email TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS yoga_data (
-                id INT PRIMARY KEY,
-                video_url TEXT,
-                content_html TEXT
-            )
-        """)
+        # 💡 MẸO CHÍ MẠNG: Bật autocommit RIÊNG cho quá trình khởi tạo DDL (tạo bảng) trên cổng Pooler
+        conn.autocommit = True
+        cursor = conn.cursor()
         
-        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG DÀNH CHO POSTGRES (SUPABASE) - ĐÃ ĐƯỢC FIX TRANSACTION LỖI
         try:
-            cursor.execute("ALTER TABLE records ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT '';")
-            conn.commit()
-        except Exception:
-            # 🚨 ĐOẠN QUAN TRỌNG: Phải rollback phiên lỗi để giải phóng hàng đợi của Postgres
-            conn.rollback() 
-
-        # Chèn dữ liệu mẫu cho Supabase
-        cursor.execute("SELECT COUNT(*) FROM yoga_data")
-        if cursor.fetchone()[0] == 0:
             cursor.execute("""
-                INSERT INTO yoga_data (id, video_url, content_html) 
-                VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE,
+                    role TEXT DEFAULT 'FREE',
+                    created_at TEXT
+                );
             """)
             cursor.execute("""
-                INSERT INTO yoga_data (id, video_url, content_html) 
-                VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
-                '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+                CREATE TABLE IF NOT EXISTS records (
+                    id SERIAL PRIMARY KEY,
+                    title TEXT,
+                    data_json TEXT,
+                    created_at TEXT,
+                    updated_at TEXT,
+                    user_email TEXT
+                );
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS yoga_data (
+                    id INT PRIMARY KEY,
+                    video_url TEXT,
+                    content_html TEXT
+                );
             """)
             
-    conn.commit()
-    cursor.close()
-    conn.close()
+            # 🔥 BỘ SỬA LỖI TỰ ĐỘNG DÀNH CHO POSTGRES (SUPABASE)
+            cursor.execute("ALTER TABLE records ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT '';")
+            
+            # Chèn dữ liệu mẫu cho Supabase an toàn chống trùng ID
+            cursor.execute("SELECT COUNT(*) FROM yoga_data")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("""
+                    INSERT INTO yoga_data (id, video_url, content_html) 
+                    VALUES (1, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                    '<div class="yoga-card">Bài tập Yoga Thư giãn sâu đoạn 1</div><div class="yoga-card">Động tác kéo giãn cơ đoạn 2</div>')
+                    ON CONFLICT (id) DO NOTHING;
+                """)
+                cursor.execute("""
+                    INSERT INTO yoga_data (id, video_url, content_html) 
+                    VALUES (2, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 
+                    '<div class="yoga-card">Belly Dance Đánh hông cơ bản đoạn 1</div><div class="yoga-card">Sóng bụng dẻo dai đoạn 2</div>')
+                    ON CONFLICT (id) DO NOTHING;
+                """)
+        except Exception as e:
+            st.error(f"💥 Lỗi thiết lập cấu hình bảng Supabase: {str(e)}")
+        finally:
+            cursor.close()
+            conn.close()
 
 # ==========================================
 # PHẦN 1: CÁC HÀM XỬ LÝ USER
