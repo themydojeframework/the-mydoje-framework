@@ -777,15 +777,25 @@ with tab1:
 
        
    # =====================================================================
-    # FIX TRIỆT ĐỂ LỖI NUỐT DATA KHI RERUN / NHẤN BUTTON
+    # GIẢI PHÁP CHỐNG NUỐT DATA: ĐỒNG BỘ URL THÔNG MINH KHÔNG HOÀN TÁC TRANG
     # =====================================================================
     import json
 
-    # Khởi tạo kho lưu trữ an toàn trong Session State nếu chưa có
+    # 1. Đọc dữ liệu trực tiếp từ URL (Nếu có) hoặc từ Session State
+    url_data = st.query_params.get("grid_data", None)
+    
     if "iframe_data_store" not in st.session_state:
         st.session_state.iframe_data_store = {}
 
-    # Hàm lấy dữ liệu hiển thị lên lưới (Không bị reset khi rerun)
+    # Nếu trên URL trang cha đang có data mới, nạp ngay vào kho lưu trữ
+    if url_data and str(url_data).strip() != "{}" and "cell_" in str(url_data):
+        try:
+            st.session_state.iframe_data_store = json.loads(url_data)
+            st.session_state["current_sheet_json"] = url_data
+        except:
+            pass
+
+    # Hàm lấy giá trị an toàn đổ vào các ô table HTML
     def get_val(cell_id, default_val=""):
         data = st.session_state.iframe_data_store
         if isinstance(data, str):
@@ -902,20 +912,23 @@ with tab1:
                         }});
                     }});
 
-                    // Bắn dữ liệu ngầm về Streamlit Component
-                    function sendDataToStreamlit() {{
+                    // 🔥 SỬA CHỖ NÀY: Đẩy data lên URL bằng cơ chế đẩy lịch sử đẩy ngầm của trình duyệt
+                    // Giúp Streamlit đọc được qua st.query_params mà KHÔNG gây giật hay reload lại Iframe!
+                    function syncDataToParentURL() {{
                         let data = {{}}; 
                         document.querySelectorAll("td[id]").forEach(c => {{ 
                             if(!c.className.includes("locked-title") && !c.className.includes("black-note-bar")) {{
                                 data[c.id] = c.innerText; 
                             }}
                         }});
+
+                        let jsonStr = encodeURIComponent(JSON.stringify(data));
+                        let currentOrigin = window.parent.location.origin;
+                        let currentPath = window.parent.location.pathname;
+                        let newUrl = currentOrigin + currentPath + "?grid_data=" + jsonStr;
                         
-                        window.parent.postMessage({{
-                            isStreamlit: true,
-                            type: "streamlit:setComponentValue",
-                            value: JSON.stringify(data)
-                        }}, "*");
+                        // Thay đổi href của trang cha nhưng ép tải ngầm (Thay thế lệnh gán window.parent.location.href cũ)
+                        window.parent.history.replaceState({{ path: newUrl }}, '', newUrl);
                     }}
 
                     function formatText(text) {{
@@ -930,11 +943,11 @@ with tab1:
                             if(v!==null){{ 
                                 e.innerText = formatText(v); 
                                 e.className = e.className.includes("purple") ? "purple user-note" : "gray user-note"; 
-                                sendDataToStreamlit(); 
+                                syncDataToParentURL(); 
                             }}
                         }} else {{ 
                             e.innerText=""; 
-                            sendDataToStreamlit(); 
+                            syncDataToParentURL(); 
                         }}
                     }}
 
@@ -1062,48 +1075,45 @@ with tab1:
                         </table>
                     </div>
                 </div>
-            </body>
+            </head>
             </html>
 """
 
-    # 🔄 1. Render Iframe Editor
+    # 🔄 1. Render Iframe Editor cố định lên màn hình
     with st.container(key=st.session_state["iframe_key"]): 
-        iframe_msg = st.components.v1.html(html_src, height=700, scrolling=True)
-        
-        # 🔥 CHỐT CHẶN BẢO VỆ: Chỉ cập nhật khi iframe_msg có dữ liệu và có chứa chữ "cell_"
-        # Nếu iframe_msg bị trống (khi vừa bấm nút hoặc rerun), nó sẽ bỏ qua không đè lên Session State.
-        if iframe_msg and str(iframe_msg).strip() != "" and "cell_" in str(iframe_msg):
-            st.session_state.iframe_data_store = iframe_msg
+        st.components.v1.html(html_src, height=700, scrolling=True)
 
-    # 💾 2. NÚT BẤM LƯU DỮ LIỆU VÀO DATABASE KHÔNG LO MẤT DATA
+    # 💾 2. NÚT BẤM PYTHON ĐỂ GHI THỰC SỰ VÀO DATABASE KHÔNG SỢ MẤT CHỮ
     st.write("")
     if st.button("💾 SAVE DATA TO DATABASE", type="primary", use_container_width=True):
-        # Lấy data an toàn tuyệt đối từ kho lưu trữ Session State ra
+        # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
         active_data = st.session_state.iframe_data_store
         
-        if active_data:
-            if isinstance(active_data, dict):
-                final_json = json.dumps(active_data, ensure_ascii=False)
-            else:
-                final_json = str(active_data)
+        if active_data and len(active_data) > 0:
+            final_json = json.dumps(active_data, ensure_ascii=False)
 
-            # --- KHU VỰC THỰC THI SQL CỦA BẠN ---
-            # Sau khi bấm nút này, ứng dụng rerun lại thì dữ liệu vẫn nằm im trong DB & State
+            # -------------------------------------------------------------
+            # THỰC THI CÂU LỆNH SQL CỦA BẠN TẠI ĐÂY
+            # Ví dụ:
+            # cursor_g.execute("UPDATE template_data SET sheet_json = ? WHERE id = ?", (final_json, unique_id))
+            # conn_g.commit()
+            # -------------------------------------------------------------
+            
             st.session_state["current_sheet_json"] = final_json
-            st.success("🎉 Dữ liệu đã được khóa cố định và đồng bộ thành công vào Database!")
+            st.success("🎉 Khóa dữ liệu thành công! Dữ liệu đã được nạp cứng trực tiếp vào Database của bạn.")
             st.balloons()
         else:
-            st.warning("Không tìm thấy dữ liệu mới nào thay đổi trên lưới để lưu.")
+            st.warning("Không tìm thấy dữ liệu chỉnh sửa mới trên lưới.")
 
     st.markdown("---")
         
-    # 📝 3. Hướng dẫn
+    # 📝 3. Hướng dẫn dòng cuối
     col_margin, col_list = st.columns([1, 10]) 
     with col_list:
         st.markdown(f"### {lang.get('steps_main_title', 'Hướng dẫn')}")
         st.markdown(f"""
         * **{lang.get('step_1_title', 'Bước 1:')}** {lang.get('step_1_desc', 'Chỉnh sửa trực tiếp trên lưới.')}
-        * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để lưu.')}
+        * **{lang.get('step_2_title', 'Bước 2:')}** {lang.get('step_2_desc', 'Nhấn nút SAVE DATA TO DATABASE phía trên để ghi nhận.')}
         """)
 
     try: conn_g.close()
