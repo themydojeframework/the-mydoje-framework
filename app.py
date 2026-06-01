@@ -17,7 +17,7 @@ import streamlit.components.v1 as components
 
 # --- 1. CẤU HÌNH TRANG (BẮT BUỘC ĐẶT ĐẦU FILE) ---
 st.set_page_config(
-    page_title="KHUNG MYDOJE OFFICIAL",
+    page_title="KHUNG MYDJ OFFICIAL",
     page_icon="👑",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -546,10 +546,15 @@ with tab1:
     if "iframe_key" not in st.session_state: st.session_state["iframe_key"] = "music_sheet_init"
     if "iframe_data_store" not in st.session_state: st.session_state["iframe_data_store"] = DEFAULT_JSON_STR
 
-    # Đọc tham số chia sẻ từ URL nếu có
+    # =====================================================================
+    # 🔥 🔥 BỘ HỨNG VÀ ĐỒNG BỘ DỮ LIỆU TỪ IFRAME (QUAN TRỌNG NHẤT KHẮC PHỤC LỖI MẤT DATA)
+    # =====================================================================
     url_grid_data = st.query_params.get("grid_data", None)
     if url_grid_data: 
-        st.session_state["current_sheet_json"] = url_grid_data
+        cleaned_url_data = clean_json_string(url_grid_data)
+        # Đồng bộ thẳng vào kho lưu trữ tạm thời để nút SAVE xử lý đúng
+        st.session_state["iframe_data_store"] = cleaned_url_data
+        st.session_state["current_sheet_json"] = cleaned_url_data
 
     # Lấy thông tin người dùng và thời gian
     current_user = st.session_state.get('logged_in_user', '')
@@ -658,20 +663,16 @@ with tab1:
                 st.rerun()
 
     with c_act2:
-            if st.button(lang.get("btn_reset", "🔄 RESET BLANK"), use_container_width=True, key="btn_reset_grid_tab1"):  
-                # Chỉ reset dữ liệu lưới nhạc về mặc định (bảng trống)
-                st.session_state["current_sheet_json"] = DEFAULT_JSON_STR
-                st.session_state["iframe_data_store"] = DEFAULT_JSON_STR
-                
-                # 🚨 KHÔNG RESET HAI DÒNG NÀY ĐỂ GIỮ NGUYÊN BÀI CŨ
-                # st.session_state["selected_sheet_id"] = None  <-- Đã bỏ
-                # st.session_state["sheet_title_input"] = ...    <-- Đã bỏ
-                
-                st.query_params.clear()
-                # Buộc Iframe render lại với lưới trống của bài hiện tại
-                st.session_state["iframe_key"] = f"forced_reset_{time.time()}"
-                st.toast(lang.get("msg_reset_success", "🧹 Đã xóa sạch các nốt trên lưới nhạc hiện tại!"))
-                st.rerun()
+        if st.button(lang.get("btn_reset", "🔄 RESET BLANK"), use_container_width=True, key="btn_reset_grid_tab1"):  
+            # Chỉ reset dữ liệu lưới nhạc về mặc định (bảng trống)
+            st.session_state["current_sheet_json"] = DEFAULT_JSON_STR
+            st.session_state["iframe_data_store"] = DEFAULT_JSON_STR
+            
+            st.query_params.clear()
+            # Buộc Iframe render lại với lưới trống của bài hiện tại
+            st.session_state["iframe_key"] = f"forced_reset_{time.time()}"
+            st.toast(lang.get("msg_reset_success", "🧹 Đã xóa sạch các nốt trên lưới nhạc hiện tại!"))
+            st.rerun()
 
     with c_act3:
         if st.button(lang.get("btn_duplicate", "👯 DUPLICATE"), use_container_width=True, key="btn_duplicate_sheet_tab1"):  
@@ -682,7 +683,7 @@ with tab1:
                 # ƯU TIÊN LẤY TỪ DATABASE HOẶC KHÓA CỨNG ĐỂ CHỐNG BẢNG TRẮNG
                 record_goc = db.get_record_by_id(st.session_state["selected_sheet_id"])
                 if record_goc:
-                    record_goc = dict(record_goc)  # Ép kiểu sqlite3.Row thành dict để dùng được hàm .get()
+                    record_goc = dict(record_goc)
                 
                 if record_goc and record_goc.get("data_json"):
                     dup_grid_data = record_goc["data_json"]
@@ -738,7 +739,6 @@ with tab1:
 
     html_body_bg = "#ffffff" if st.session_state.get("app_theme", "☀️ Light") == "☀️ Light" else "#1e1e1e"
     html_text_color = "#000000" if st.session_state.get("app_theme", "☀️ Light") == "☀️ Light" else "#ffffff"
-
     
 
        

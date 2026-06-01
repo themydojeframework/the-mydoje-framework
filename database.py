@@ -24,7 +24,7 @@ def get_connection():
         return conn
 
 def init_db():
-    """Khởi tạo toàn bộ hệ thống bảng cho cả 2 môi trường SQLite và PostgreSQL."""
+    """Khởi tạo toàn bộ hệ thống bảng và tự động cập nhật cột thiếu cho cả 2 môi trường."""
     conn = get_connection()
     cursor = conn.cursor()
     
@@ -56,6 +56,14 @@ def init_db():
             )
         """)
         
+        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG (MIGRATION): Thử thêm cột user_email nếu bảng cũ chưa có
+        try:
+            cursor.execute("ALTER TABLE records ADD COLUMN user_email TEXT DEFAULT '';")
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Nếu cột đã tồn tại rồi, SQLite sẽ báo lỗi trùng lặp và ta bỏ qua một cách an toàn
+            pass
+
         # Chèn dữ liệu mẫu cho SQLite
         cursor.execute("SELECT COUNT(*) FROM yoga_data")
         if cursor.fetchone()[0] == 0:
@@ -97,6 +105,14 @@ def init_db():
             )
         """)
         
+        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG DÀNH CHO POSTGRES (SUPABASE) - ĐÃ ĐƯỢC FIX TRANSACTION LỖI
+        try:
+            cursor.execute("ALTER TABLE records ADD COLUMN IF NOT EXISTS user_email TEXT DEFAULT '';")
+            conn.commit()
+        except Exception:
+            # 🚨 ĐOẠN QUAN TRỌNG: Phải rollback phiên lỗi để giải phóng hàng đợi của Postgres
+            conn.rollback() 
+
         # Chèn dữ liệu mẫu cho Supabase
         cursor.execute("SELECT COUNT(*) FROM yoga_data")
         if cursor.fetchone()[0] == 0:
@@ -197,7 +213,6 @@ def insert_record(title, data_json):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Lấy thông tin user hiện tại từ Streamlit Session State để lưu vào DB
     current_user = st.session_state.get('logged_in_user', '')
     
     if "sqlite" in DATABASE_URL:
