@@ -1083,9 +1083,11 @@ with tab1:
     with st.container(key=st.session_state["iframe_key"]): 
         st.components.v1.html(html_src, height=700, scrolling=True)
 
-    # 💾 2. NÚT BẤM PYTHON ĐỂ GHI THỰC SỰ VÀO DATABASE KHÔNG SỢ MẤT CHỮ
+    # 💾 2. NÚT BẤM LƯU DỮ LIỆU (ĐÃ ĐỔI SANG MÀU XANH DƯƠNG CHUYÊN NGHIỆP)
     st.write("")
-    if st.button("💾 SAVE DATA TO DATABASE", type="primary", use_container_width=True):
+    
+    # Sử dụng type="secondary" để loại bỏ màu đỏ rực nguy hiểm, đổi thành màu xanh dương/trung tính lịch sự
+    if st.button("💾 SAVE DATA", type="secondary", use_container_width=True):
         # Lấy dữ liệu an toàn từ kho lưu trữ đã đồng bộ từ URL 
         active_data = st.session_state.iframe_data_store
         
@@ -1112,12 +1114,12 @@ with tab1:
                 json_file_1["current_lang"] = st.session_state.get("language", "vi")
                 json_file_2["current_lang"] = st.session_state.get("language", "vi")
 
-            # Chuyển thành chuỗi JSON dạng string an toàn
+            # 🔥 ĐÂY LÀ 2 BIẾN JSON ĐỂ BẠN DÙNG CHO CÂU LỆNH SQL HOẶC FILE JSON
             json_str_1 = json.dumps(json_file_1, ensure_ascii=False)
             json_str_2 = json.dumps(json_file_2, ensure_ascii=False)
 
             # -------------------------------------------------------------
-            # THỰC THI SQL CỦA BẠN VỚI 2 BIẾN JSON
+            # TRỰC THI SQL CỦA BẠN VỚI VỚI KHỐI 2 BIẾN JSON NÀY:
             # cursor_g.execute("UPDATE template_data SET grid_json = ?, info_json = ? WHERE id = ?", (json_str_1, json_str_2, unique_id))
             # conn_g.commit()
             # -------------------------------------------------------------
