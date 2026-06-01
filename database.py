@@ -6,43 +6,41 @@ from datetime import datetime
 from dotenv import load_dotenv
 import streamlit as st
 import json
+import ast
 
 # Kích hoạt đọc file .env dưới máy local
 load_dotenv()
 
-# Lấy cấu hình URL kết nối thông minh (Ưu tiên Streamlit Secrets trước, sau đó tới môi trường máy local)
+# --- CHUẨN HÓA URL KẾT NỐI NGAY TỪ ĐẦU ---
+raw_url = ""
 if "DATABASE_URL" in st.secrets:
-    DATABASE_URL = st.secrets["DATABASE_URL"]
+    raw_url = st.secrets["DATABASE_URL"]
 else:
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+    raw_url = os.getenv("DATABASE_URL", "sqlite:///app.db")
+
+# Làm sạch khoảng trắng và nháy thừa, đồng bộ đầu ngữ postgresql -> postgres cho psycopg2
+clean_url = raw_url.strip().replace('"', '').replace("'", "")
+if clean_url.startswith("postgresql://"):
+    clean_url = clean_url.replace("postgresql://", "postgres://", 1)
+
+DATABASE_URL = clean_url
+
 
 def get_connection():
     """Tự động kết nối tới đúng hệ quản trị cơ sở dữ liệu dựa theo môi trường."""
-    global DATABASE_URL
-    
     if "sqlite" in DATABASE_URL:
         conn = sqlite3.connect("app.db", check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
     else:
-        # Làm sạch khoảng trắng và nháy kép thừa
-        clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
-        
-        # Đồng bộ đầu ngữ cho psycopg2
-        if clean_url.startswith("postgresql://"):
-            clean_url = clean_url.replace("postgresql://", "postgres://", 1)
-            
         try:
-            # Kết nối qua cổng Pooler ổn định IPv4
-            conn = psycopg2.connect(clean_url, sslmode="require")
-            
-            # 🚨 ĐÃ FIX: KHÔNG bật autocommit vĩnh viễn ở đây để tránh làm lỗi 
-            # các hàm INSERT/UPDATE/COMMIT ở các hàm nghiệp vụ bên dưới.
+            # Kết nối qua cổng Pooler ổn định IPv4 của Supabase
+            conn = psycopg2.connect(DATABASE_URL, sslmode="require")
             return conn
         except Exception as e:
-            import streamlit as st
             st.error(f"💥 LỖI KẾT NỐI SUPABASE THỰC TẾ: {str(e)}")
             raise e
+
 
 def init_db():
     """Khởi tạo toàn bộ hệ thống bảng và tự động cập nhật cột thiếu cho cả 2 môi trường."""
@@ -77,7 +75,7 @@ def init_db():
             )
         """)
         
-        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG (MIGRATION): Thử thêm cột user_email nếu bảng cũ chưa có
+        # 🔥 BỘ SỬA LỖI TỰ ĐỘNG (MIGRATION)
         try:
             cursor.execute("ALTER TABLE records ADD COLUMN user_email TEXT DEFAULT '';")
             conn.commit()
@@ -102,8 +100,7 @@ def init_db():
         conn.close()
         
     else:
-        # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE MÂY) ---
-        # 💡 MẸO CHÍ MẠNG: Bật autocommit RIÊNG cho quá trình khởi tạo DDL (tạo bảng) trên cổng Pooler
+        # --- CẤU HÌNH BẢNG CHO POSTGRESQL (SUPABASE) ---
         conn.autocommit = True
         cursor = conn.cursor()
         
@@ -158,6 +155,7 @@ def init_db():
             cursor.close()
             conn.close()
 
+
 # ==========================================
 # PHẦN 1: CÁC HÀM XỬ LÝ USER
 # ==========================================
@@ -191,6 +189,7 @@ def check_or_create_user(email):
     conn.close()
     return user
 
+
 def update_user_role(email, new_role):
     conn = get_connection()
     cursor = conn.cursor()
@@ -201,6 +200,7 @@ def update_user_role(email, new_role):
     conn.commit()
     cursor.close()
     conn.close()
+
 
 # ==========================================
 # PHẦN 2: CÁC HÀM XỬ LÝ TAB 1 (SHEET NHẠC)
@@ -220,6 +220,7 @@ def get_all_records():
     conn.close()
     return rows
 
+
 def get_record_by_id(record_id):
     conn = get_connection()
     if "sqlite" in DATABASE_URL:
@@ -236,31 +237,35 @@ def get_record_by_id(record_id):
     conn.close()
     return result
 
+
+def _clean_json_helper(data_json):
+    """Hàm phụ trợ ép dữ liệu thành chuỗi JSON nháy kép chuẩn."""
+    try:
+        if isinstance(data_json, (dict, list)):
+            return json.dumps(data_json, ensure_ascii=False)
+        elif isinstance(data_json, str):
+            try:
+                parsed_obj = json.loads(data_json)
+                return json.dumps(parsed_obj, ensure_ascii=False)
+            except Exception:
+                try:
+                    parsed_obj = ast.literal_eval(data_json)
+                    return json.dumps(parsed_obj, ensure_ascii=False)
+                except Exception:
+                    return data_json
+        else:
+            return str(data_json)
+    except Exception:
+        return str(data_json)
+
+
 def insert_record(title, data_json):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     current_user = st.session_state.get('logged_in_user', '')
     
-    # Ép dữ liệu thành chuỗi JSON nháy kép chuẩn
-    try:
-        if isinstance(data_json, (dict, list)):
-            clean_json_str = json.dumps(data_json, ensure_ascii=False)
-        elif isinstance(data_json, str):
-            try:
-                parsed_obj = json.loads(data_json)
-                clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
-            except Exception:
-                import ast
-                try:
-                    parsed_obj = ast.literal_eval(data_json)
-                    clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
-                except Exception:
-                    clean_json_str = data_json
-        else:
-            clean_json_str = str(data_json)
-    except Exception:
-        clean_json_str = str(data_json)
+    clean_json_str = _clean_json_helper(data_json)
 
     if "sqlite" in DATABASE_URL:
         cursor.execute(
@@ -289,33 +294,17 @@ def insert_record(title, data_json):
             conn.close()
             raise e
 
+
 def add_record(title, data_json):
     return insert_record(title, data_json)
+
 
 def update_record_data(record_id, data_json):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # Ép dữ liệu thành chuỗi JSON nháy kép chuẩn
-    try:
-        if isinstance(data_json, (dict, list)):
-            clean_json_str = json.dumps(data_json, ensure_ascii=False)
-        elif isinstance(data_json, str):
-            try:
-                parsed_obj = json.loads(data_json)
-                clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
-            except Exception:
-                import ast
-                try:
-                    parsed_obj = ast.literal_eval(data_json)
-                    clean_json_str = json.dumps(parsed_obj, ensure_ascii=False)
-                except Exception:
-                    clean_json_str = data_json
-        else:
-            clean_json_str = str(data_json)
-    except Exception:
-        clean_json_str = str(data_json)
+    clean_json_str = _clean_json_helper(data_json)
     
     if "sqlite" in DATABASE_URL:
         cursor.execute(
@@ -340,6 +329,7 @@ def update_record_data(record_id, data_json):
             conn.close()
             raise e
 
+
 def update_record_title(record_id, new_title):
     conn = get_connection()
     cursor = conn.cursor()
@@ -351,6 +341,7 @@ def update_record_title(record_id, new_title):
     cursor.close()
     conn.close()
 
+
 def delete_record(record_id):
     conn = get_connection()
     cursor = conn.cursor()
@@ -361,6 +352,7 @@ def delete_record(record_id):
     conn.commit()
     cursor.close()
     conn.close()
+
 
 # ==========================================
 # PHẦN 3: CÁC HÀM XỬ LÝ NỘI DUNG PREMIUM (TAB 2 & TAB 3)
@@ -381,6 +373,7 @@ def get_yoga_data_by_id(content_id):
     cursor.close()
     conn.close()
     return result
+
 
 def update_yoga_data(content_id, video_url, content_html):
     conn = get_connection()
