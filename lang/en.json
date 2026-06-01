@@ -37,6 +37,8 @@
   "msg_warning_duplicate": "You cannot duplicate an unsaved record!",
   "msg_warning_delete": "Unsaved new records cannot be deleted!",
   "msg_error_title": "Please provide a valid title!",
+  "save_success_lbl": "Data updated successfully! Your backup is securely saved on the system.",
+  "no_data_changes_lbl": "No new edited data found on the framework.",
   
   "__COMMENT_3__": "================ PREMIUM COURSE INTERFACE ================",
   "premium_lock_title": "🔒 ADVANCED CONTENT RESERVED FOR PREMIUM USERS",

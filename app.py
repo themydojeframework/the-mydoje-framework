@@ -1099,11 +1099,24 @@ with tab1:
             # conn_g.commit()
             # -------------------------------------------------------------
             
-            st.session_state["current_sheet_json"] = final_json
-            st.success("🎉 Khóa dữ liệu thành công! Dữ liệu đã được nạp cứng trực tiếp vào Database của bạn.")
+            # Chuyển thành chuỗi JSON dạng string (Đã xử lý gom ô ở bước trước)
+            json_str_1 = json.dumps(json_file_1, ensure_ascii=False)
+            json_str_2 = json.dumps(json_file_2, ensure_ascii=False)
+
+            # -------------------------------------------------------------
+            # THỰC THI SQL CỦA BẠN VỚI VỚI 2 BIẾN JSON
+            # cursor_g.execute("UPDATE template_data SET grid_json = ?, info_json = ? WHERE id = ?", (json_str_1, json_str_2, unique_id))
+            # conn_g.commit()
+            # -------------------------------------------------------------
+
+            # Cập nhật Session State (Lưu chuỗi tổng hoặc chuỗi riêng tùy bạn quản lý)
+            st.session_state["current_sheet_json"] = json.dumps(active_data, ensure_ascii=False)
+            
+            # Hiển thị thông báo động theo ngôn ngữ đã cấu hình trong file lang
+            st.success(f"🎉 {lang.get('save_success_lbl', 'Cập nhật dữ liệu thành công!')}")
             st.balloons()
         else:
-            st.warning("Không tìm thấy dữ liệu chỉnh sửa mới trên lưới.")
+            st.warning(f"{lang.get('no_data_changes_lbl', 'Không tìm thấy dữ liệu chỉnh sửa mới trên lưới.')}")
 
     st.markdown("---")
         
