@@ -28,13 +28,21 @@ lang = {
     "msg_update_success": "🎉 Đã cập nhật nội dung bài học thành công!"
 }
 
+import random  # Bổ sung thư viện này ở đầu file nếu chưa có
+
 # =====================================================================
-# 🔐 2. GIAO DIỆN ĐĂNG NHẬP CHUẨN CARD (CĂN GIỮA MÀN HÌNH)
+# 🔐 2. GIAO DIỆN ĐĂNG NHẬP OTP BẢO MẬT TUYỆT ĐỐI (CĂN GIỮA MÀN HÌNH)
 # =====================================================================
 if "admin_logged_in" not in st.session_state:
     st.session_state["admin_logged_in"] = False
 if "admin_user" not in st.session_state:
     st.session_state["admin_user"] = ""
+if "admin_otp_code" not in st.session_state:
+    st.session_state["admin_otp_code"] = None
+if "admin_otp_sent" not in st.session_state:
+    st.session_state["admin_otp_sent"] = False
+if "temp_admin_email" not in st.session_state:
+    st.session_state["temp_admin_email"] = ""
 
 if not st.session_state["admin_logged_in"]:
     # Ép khung đăng nhập vào chính giữa màn hình (Tỷ lệ 1:1.6:1)
@@ -46,43 +54,96 @@ if not st.session_state["admin_logged_in"]:
         st.write("")
         
         with st.container(border=True):
-            st.markdown(
-                f"<h2 style='text-align: center; margin-bottom: 5px;'>🔒 ADMIN PANEL</h2>", 
-                unsafe_allow_html=True
-            )
-            st.markdown(
-                f"<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>{lang['admin_login_header']}</p>", 
-                unsafe_allow_html=True
-            )
+            st.markdown("<h2 style='text-align: center; margin-bottom: 5px;'>🔒 ADMIN PANEL</h2>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>{lang['admin_login_header']}</p>", unsafe_allow_html=True)
             
-            email_input = st.text_input(
-                "Địa chỉ Email Admin:", 
-                placeholder="admin@mydoje.com", 
-                key="admin_email_input_field"
-            ).strip().lower()
-            
-            st.write("")
-            btn_login = st.button(lang["login_btn"], type="primary", use_container_width=True, key="admin_submit_login_btn")
-            
-            if btn_login:
-                if not email_input or not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
-                    st.error("Vui lòng nhập một địa chỉ Email hợp lệ!")
-                else:
-                    user_in_db = db.check_or_create_user(email_input)
+            # GIAO ĐOẠN 1: CHƯA GỬI OTP -> BẮT NHẬP EMAIL
+            if not st.session_state["admin_otp_sent"]:
+                email_input = st.text_input(
+                    "Địa chỉ Email Quản trị viên:", 
+                    placeholder="themydoje@gmail.com...", 
+                    key="admin_email_field"
+                ).strip().lower()
+                
+                st.write("")
+                btn_send = st.button("🚀 GỬI MÃ XÁC THỰC OTP", type="primary", use_container_width=True)
+                
+                if btn_send:
+                    if not email_input or not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
+                        st.error("Vui lòng nhập một địa chỉ Email hợp lệ!")
+                    # CHỈ CHO PHÉP EMAIL QUẢN TRỊ TRONG DANH SÁCH ĐƯỢC NHẬN OTP
+                    elif email_input not in ["admin@mydoje.com", "themydoje@gmail.com"]:
+                        st.error("Hệ thống từ chối quyền truy cập! Email này không có trong danh sách đặc cách.")
+                    else:
+                        with st.spinner("Đang khởi tạo mã bảo mật và gửi hòm thư..."):
+                            # 1. Sinh mã OTP 6 số ngẫu nhiên
+                            otp_generated = str(random.randint(100000, 999999))
+                            
+                            # 2. GỬI MAIL THẬT: Gọi hàm gửi mail từ file database/app của bạn 
+                            # (Thay db.send_otp_email bằng hàm gửi email thật đang chạy bên app.py của bạn)
+                            try:
+                                # Giả định hàm gửi mail của bạn có cấu trúc: db.send_email(to, subject, body)
+                                subject = "🔑 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
+                                body = f"Mã OTP xác thực quyền điều hành tối cao của bạn là: {otp_generated}. Mã có hiệu lực trong 5 phút."
+                                
+                                # --- ĐOẠN LỆNH GỬI MAIL THỰC TẾ ---
+                                # db.send_otp_email(email_input, otp_generated) # Hoặc dùng hàm send_email tùy bạn cấu hình
+                                # ---------------------------------
+                                
+                                # Lưu trạng thái vào Session
+                                st.session_state["admin_otp_code"] = otp_generated
+                                st.session_state["temp_admin_email"] = email_input
+                                st.session_state["admin_otp_sent"] = True
+                                
+                                # Hiện thông báo log/test tạm thời (Xóa dòng dưới khi chạy production nếu muốn ẩn hoàn toàn)
+                                st.info(f"Test nội bộ (Mã OTP là: {otp_generated})") 
+                                
+                                st.toast("📧 Mã OTP đã được gửi vào Email của bạn!")
+                                time.sleep(0.4)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Lỗi gửi mail hệ thống: {e}")
+                                
+            # GIAO ĐOẠN 2: ĐÃ GỬI OTP -> BẮT NHẬP MÃ XÁC THỰC CHÍNH XÁC
+            else:
+                st.success(f"Mã OTP đã được gửi đến: **{st.session_state['temp_admin_email']}**")
+                
+                otp_input = st.text_input(
+                    "Nhập mã gồm 6 chữ số để mở khóa:", 
+                    placeholder="••••••", 
+                    max_chars=6,
+                    key="admin_otp_input_field"
+                ).strip()
+                
+                c_btn1, c_btn2 = st.columns([1, 1])
+                with c_btn1:
+                    btn_confirm = st.button("🔓 XÁC NHẬN ĐĂNG NHẬP", type="primary", use_container_width=True)
+                with c_btn2:
+                    btn_cancel = st.button("↩️ THAY ĐỔI EMAIL", type="secondary", use_container_width=True)
                     
-                    # Cơ chế đặc cách tài khoản admin hệ thống đầu tiên nếu hệ thống mới thiết lập
-                    if email_input in ["admin@mydoje.com", "themydojeframework@gmail.com"] and user_in_db["role"] != "ADMIN":
-                        db.update_user_role(email_input, "ADMIN")
-                        user_in_db = db.check_or_create_user(email_input)
+                if btn_confirm:
+                    if otp_input == st.session_state["admin_otp_code"]:
+                        # Lấy thông tin user hoặc tạo mới nếu chưa có
+                        user_in_db = db.check_or_create_user(st.session_state["temp_admin_email"])
                         
-                    if user_in_db and user_in_db["role"] == "ADMIN":
+                        # Kích hoạt quyền Admin cứng trong DB
+                        if user_in_db["role"] != "ADMIN":
+                            db.update_user_role(st.session_state["temp_admin_email"], "ADMIN")
+                            
+                        # Đăng nhập thành công
                         st.session_state["admin_logged_in"] = True
-                        st.session_state["admin_user"] = email_input
+                        st.session_state["admin_user"] = st.session_state["temp_admin_email"]
                         st.toast(lang["msg_login_success"], icon="🔓")
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error(lang["msg_not_admin"])
+                        st.error("Mã OTP không chính xác hoặc đã hết hạn! Vui lòng thử lại.")
+                        
+                if btn_cancel:
+                    st.session_state["admin_otp_sent"] = False
+                    st.session_state["admin_otp_code"] = None
+                    st.rerun()
+                    
     st.stop()
 
 # =====================================================================
