@@ -9,8 +9,11 @@ import streamlit as st
 # Kích hoạt đọc file .env dưới máy local
 load_dotenv()
 
-# Lấy cấu hình URL kết nối thông minh
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
+# Lấy cấu hình URL kết nối thông minh (Ưu tiên Streamlit Secrets trước, sau đó tới môi trường máy local)
+if "DATABASE_URL" in st.secrets:
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+else:
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app.db")
 
 def get_connection():
     """Tự động kết nối tới đúng hệ quản trị cơ sở dữ liệu dựa theo môi trường."""
