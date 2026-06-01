@@ -141,14 +141,42 @@ if not st.session_state["admin_logged_in"]:
                             otp_generated = str(random.randint(100000, 999999))
                             
                             try:
-                                # Khởi tạo cấu hình và gọi Mail thật bằng SMTP
-                                msg = MIMEMultipart()
+                                # Khởi tạo cấu hình và gọi Mail thật bằng SMTP (Multipart thay vì Plain text)
+                                msg = MIMEMultipart('alternative')
                                 msg['From'] = st.secrets["smtp"]["user"]
                                 msg['To'] = email_input
-                                msg['Subject'] = "🔑 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
+                                msg['Subject'] = "🔒 [MYDOJE ADMIN] - MÃ OTP TRUY CẬP HỆ THỐNG"
 
-                                body = f"Mã OTP xác thực quyền điều hành tối cao của bạn là: {otp_generated}. Mã có hiệu lực trong 5 phút."
-                                msg.attach(MIMEText(body, 'plain', 'utf-8'))
+                                # Thiết kế giao diện HTML/CSS nâng cấp cho Mail
+                                html_content = f"""
+                                <html>
+                                  <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 20px; margin: 0;">
+                                    <div style="max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #FF4B4B;">
+                                      
+                                      <h2 style="color: #1E1E1E; text-align: center; margin-top: 0; font-size: 22px;">🔒 Xác Thực Hệ Thống</h2>
+                                      
+                                      <p style="color: #555555; font-size: 15px; line-height: 1.6; text-align: center;">
+                                        Bạn đang yêu cầu truy cập vào ban điều hành tối cao của <strong>MyDoJe</strong>.<br>
+                                        Vui lòng sử dụng mã OTP bảo mật dưới đây:
+                                      </p>
+                                      
+                                      <!-- Ô HIỂN THỊ MÃ OTP NỔI BẬT RỰC RỠ -->
+                                      <div style="background: #FFF0F0; border: 2px dashed #FF4B4B; border-radius: 8px; padding: 15px; text-align: center; margin: 25px 0;">
+                                        <span style="font-size: 36px; font-weight: bold; color: #FF4B4B; letter-spacing: 6px; font-family: monospace;">
+                                          {otp_generated}
+                                        </span>
+                                      </div>
+                                      
+                                      <p style="color: #999999; font-size: 13px; text-align: center; margin-bottom: 0;">
+                                        ⏳ Mã này có hiệu lực trong vòng <strong>5 phút</strong>.<br>
+                                        Nếu không phải bạn thực hiện, vui lòng bỏ qua email này.
+                                      </p>
+                                      
+                                    </div>
+                                  </body>
+                                </html>
+                                """
+                                msg.attach(MIMEText(html_content, 'html', 'utf-8'))
 
                                 server = smtplib.SMTP(st.secrets["smtp"]["server"], st.secrets["smtp"]["port"])
                                 server.starttls()
@@ -183,7 +211,7 @@ if not st.session_state["admin_logged_in"]:
                     btn_confirm = st.button("🔓 XÁC NHẬN ĐĂNG NHẬP", type="primary", use_container_width=True)
                 with c_btn2:
                     btn_cancel = st.button("↩️ THAY ĐỔI EMAIL", type="secondary", use_container_width=True)
-                    
+                
                 if btn_confirm:
                     if otp_input == st.session_state["admin_otp_code"]:
                         user_in_db = db.check_or_create_user(st.session_state["temp_admin_email"])
