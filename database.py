@@ -21,16 +21,21 @@ def get_connection():
         conn.row_factory = sqlite3.Row
         return conn
     else:
-        # Làm sạch khoảng trắng thừa
+        # Làm sạch khoảng trắng và nháy kép thừa
         clean_url = DATABASE_URL.strip().replace('"', '').replace("'", "")
         
-        # Chỉ nắn đầu ngữ nếu nó là postgresql://
+        # Đồng bộ đầu ngữ cho psycopg2
         if clean_url.startswith("postgresql://"):
             clean_url = clean_url.replace("postgresql://", "postgres://", 1)
             
         try:
-            # Kết nối qua cổng Pooler IPv4 kèm tham số chống nghẽn bọc sẵn trong chuỗi
-            conn = psycopg2.connect(clean_url)
+            # 1. Kết nối qua cổng Pooler ổn định IPv4
+            conn = psycopg2.connect(clean_url, sslmode="require")
+            
+            # 2. 🔥 MẸO CHÍ MẠNG: Tắt prepare_threshold trực tiếp trên connection của psycopg2
+            # Cách này giúp vượt qua cơ chế chặn lệnh tạo bảng của Transaction/Session Pooler
+            conn.autocommit = True
+            
             return conn
         except Exception as e:
             import streamlit as st
