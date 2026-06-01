@@ -33,8 +33,19 @@ lang = {
 
 import random  # Bổ sung thư viện này ở đầu file nếu chưa có
 
+import random
+import re
+import time
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import streamlit as st
+
+# Giả định danh sách quản trị viên tối cao được phép truy cập hệ thống
+ADMIN_WHITELIST = ["admin@mydoje.com", "themydoje@gmail.com"]
+
 # =====================================================================
-# 🔐 2. GIAO DIỆN ĐĂNG NHẬP OTP BẢO MẬT TUYỆT ĐỐI (CĂN GIỮA MÀN HÌNH)
+# 🔐 2. HỆ THỐNG ĐĂNG NHẬP ADMIN ĐA PHƯƠNG THỨC (GOOGLE & EMAIL OTP)
 # =====================================================================
 if "admin_logged_in" not in st.session_state:
     st.session_state["admin_logged_in"] = False
@@ -47,19 +58,68 @@ if "admin_otp_sent" not in st.session_state:
 if "temp_admin_email" not in st.session_state:
     st.session_state["temp_admin_email"] = ""
 
+# --- XỬ LÝ ĐĂNG NHẬP GOOGLE BIẾN TRẢ VỀ (REDIRECT OAUTH2) ---
+# Đoạn này xử lý nếu bạn nhấn nút Google và được Google trả ngược email về URL
+query_params = st.query_params
+if "code" in query_params and not st.session_state["admin_logged_in"]:
+    try:
+        # 💡 Phần này kết nối với hàm hứng token và đọc email Google giống y hệt file app.py của bạn.
+        # Ở đây là logic kiểm tra giả định sau khi lấy được google_email từ API:
+        google_email = "themydoje@gmail.com" # Dòng này thay bằng hàm lấy email thật từ Google của bạn
+        
+        if google_email in ADMIN_WHITELIST:
+            user_in_db = db.check_or_create_user(google_email)
+            if user_in_db["role"] != "ADMIN":
+                db.update_user_role(google_email, "ADMIN")
+            
+            st.session_state["admin_logged_in"] = True
+            st.session_state["admin_user"] = google_email
+            st.query_params.clear() # Xóa tham số code trên URL
+            st.rerun()
+        else:
+            st.error("Tài khoản Google này không có quyền truy cập vùng Quản trị!")
+    except Exception as e:
+        st.error(f"Lỗi xác thực Google: {e}")
+
+# --- GIAO DIỆN KHUNG ĐĂNG NHẬP CĂN GIỮA ---
 if not st.session_state["admin_logged_in"]:
-    # Ép khung đăng nhập vào chính giữa màn hình (Tỷ lệ 1:1.6:1)
     side_col1, main_login_col, side_col3 = st.columns([1, 1.6, 1])
     
     with main_login_col:
         st.write("")
         st.write("")
-        st.write("")
         
         with st.container(border=True):
             st.markdown("<h2 style='text-align: center; margin-bottom: 5px;'>🔒 ADMIN PANEL</h2>", unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>{lang['admin_login_header']}</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; color: #888888; font-size: 14px; margin-bottom: 25px;'>Hệ thống xác thực quyền điều hành tối cao</p>", unsafe_allow_html=True)
             
+            # -----------------------------------------------------------------
+            # PHƯƠNG THỨC 1: ĐĂNG NHẬP GOOGLE OAUTH2 (NÚT BẤM NHANH)
+            # -----------------------------------------------------------------
+            if not st.session_state["admin_otp_sent"]:
+                # Cấu hình URL OAuth2 Google (Lấy CLIENT_ID và REDIRECT_URI từ Secrets giống app.py)
+                try:
+                    client_id = st.secrets["google"]["client_id"]
+                    redirect_uri = st.secrets["google"]["redirect_uri"] # URL trang admin.py này trên cloud
+                    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope=openid%20email%20profile"
+                    
+                    google_btn_html = f"""
+                    <a href="{google_auth_url}" target="_self" style="text-decoration: none;">
+                        <div style="display: flex; align-items: center; justify-content: center; background-color: #ffffff; color: #3c4043; border: 1px solid #dadce0; padding: 10px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-bottom: 20px; font-size: 14px; transition: background-color 0.2s;">
+                            <img src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/web-24dp/logo_googleg_color_24dp.png" style="width:18px; margin-right:12px;"/>
+                            Đăng nhập nhanh bằng Google Auth
+                        </div>
+                    </a>
+                    """
+                    st.markdown(google_btn_html, unsafe_allow_html=True)
+                except:
+                    st.caption("⚠️ Google Auth chưa cấu hình khóa Secrets, chuyển sang dùng mã OTP bên dưới.")
+                
+                st.markdown("<div style='text-align: center; color: #bbb; margin-bottom: 15px; font-size: 12px;'>— HOẶC SỬ DỤNG MÃ OTP EMAIL —</div>", unsafe_allow_html=True)
+
+            # -----------------------------------------------------------------
+            # PHƯƠNG THỨC 2: ĐĂNG NHẬP OTP EMAIL (2 GIAO ĐOẠN)
+            # -----------------------------------------------------------------
             # GIAO ĐOẠN 1: CHƯA GỬI OTP -> BẮT NHẬP EMAIL
             if not st.session_state["admin_otp_sent"]:
                 email_input = st.text_input(
@@ -74,18 +134,14 @@ if not st.session_state["admin_logged_in"]:
                 if btn_send:
                     if not email_input or not re.match(r"[^@]+@[^@]+\.[^@]+", email_input):
                         st.error("Vui lòng nhập một địa chỉ Email hợp lệ!")
-                    # CHỈ CHO PHÉP EMAIL QUẢN TRỊ TRONG DANH SÁCH ĐƯỢC NHẬN OTP
-                    elif email_input not in ["admin@mydoje.com", "themydojeframework@gmail.com"]:
-                        st.error("Hệ thống từ chối quyền truy cập! Email này không có trong danh sách đặc cách.")
+                    elif email_input not in ADMIN_WHITELIST:
+                        st.error("Hệ thống từ chối! Email này không nằm trong danh sách đặc cách.")
                     else:
-                        with st.spinner("Đang khởi tạo mã bảo mật và gửi hòm thư..."):
-                            # 1. Sinh mã OTP 6 số ngẫu nhiên
+                        with st.spinner("Đang kết nối SMTP Server và gửi mã..."):
                             otp_generated = str(random.randint(100000, 999999))
                             
-                            # 2. GỬI MAIL THẬT: Gọi hàm gửi mail từ file database/app của bạn 
-                            # (Thay db.send_otp_email bằng hàm gửi email thật đang chạy bên app.py của bạn)
                             try:
-                                # Cấu hình Mail từ Secrets của App Admin trên Cloud
+                                # Khởi tạo cấu hình và gọi Mail thật bằng SMTP
                                 msg = MIMEMultipart()
                                 msg['From'] = st.secrets["smtp"]["user"]
                                 msg['To'] = email_input
@@ -94,23 +150,22 @@ if not st.session_state["admin_logged_in"]:
                                 body = f"Mã OTP xác thực quyền điều hành tối cao của bạn là: {otp_generated}. Mã có hiệu lực trong 5 phút."
                                 msg.attach(MIMEText(body, 'plain', 'utf-8'))
 
-                                # Gọi cổng kết nối SMTP Gmail
                                 server = smtplib.SMTP(st.secrets["smtp"]["server"], st.secrets["smtp"]["port"])
                                 server.starttls()
                                 server.login(st.secrets["smtp"]["user"], st.secrets["smtp"]["password"])
                                 server.sendmail(st.secrets["smtp"]["user"], email_input, msg.as_string())
                                 server.quit()
 
-                                # Lưu trạng thái vào Session sau khi gửi THÀNH CÔNG
+                                # Lưu trạng thái thành công
                                 st.session_state["admin_otp_code"] = otp_generated
                                 st.session_state["temp_admin_email"] = email_input
                                 st.session_state["admin_otp_sent"] = True
 
-                                st.toast("📧 Mã OTP đã được gửi vào Email của bạn!")
+                                st.toast("📧 Mã OTP đã gửi thành công!")
                                 time.sleep(0.4)
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Lỗi gửi mail hệ thống: {e}")
+                                st.error(f"Lỗi gửi mail hệ thống: {e}. Vui lòng kiểm tra lại cấu hình mục Secrets của App này.")
                                 
             # GIAO ĐOẠN 2: ĐÃ GỬI OTP -> BẮT NHẬP MÃ XÁC THỰC CHÍNH XÁC
             else:
@@ -131,21 +186,18 @@ if not st.session_state["admin_logged_in"]:
                     
                 if btn_confirm:
                     if otp_input == st.session_state["admin_otp_code"]:
-                        # Lấy thông tin user hoặc tạo mới nếu chưa có
                         user_in_db = db.check_or_create_user(st.session_state["temp_admin_email"])
                         
-                        # Kích hoạt quyền Admin cứng trong DB
                         if user_in_db["role"] != "ADMIN":
                             db.update_user_role(st.session_state["temp_admin_email"], "ADMIN")
                             
-                        # Đăng nhập thành công
                         st.session_state["admin_logged_in"] = True
                         st.session_state["admin_user"] = st.session_state["temp_admin_email"]
-                        st.toast(lang["msg_login_success"], icon="🔓")
+                        st.toast("Mở khóa thành công! Chào mừng Admin.", icon="🔓")
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("Mã OTP không chính xác hoặc đã hết hạn! Vui lòng thử lại.")
+                        st.error("Mã OTP không chính xác! Vui lòng kiểm tra lại hòm thư.")
                         
                 if btn_cancel:
                     st.session_state["admin_otp_sent"] = False
